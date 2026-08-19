@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fixture from './fixtures/0050.json'
-import { sma, bollinger, kd, percentB, bandwidth } from '../src/lib/indicators.js'
-import type { Bar } from '../src/lib/types.js'
+import { sma, bollinger, kd, percentB, bandwidth } from '../src/lib/indicators'
+import type { Bar } from '../src/lib/types'
 
 const bars = fixture.bars as Bar[]
 const exp = fixture.expected

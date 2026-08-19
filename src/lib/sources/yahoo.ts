@@ -1,4 +1,4 @@
-import type { Bar } from '../types.js'
+import type { Bar } from '../types'
 
 /**
  * Yahoo Finance chart API。**美股的主來源**；台股只當備援與除權息事件來源。

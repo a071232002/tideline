@@ -1,4 +1,4 @@
-import type { Levels } from './levels.js'
+import type { Levels } from './levels'
 
 /**
  * 規則版結論（PLAN §5 第 3 層）。**這是地板，不是天花板。**

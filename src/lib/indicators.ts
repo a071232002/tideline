@@ -1,4 +1,4 @@
-import type { Bar, BollingerBands, KdValue } from './types.js'
+import type { Bar, BollingerBands, KdValue } from './types'
 
 /**
  * 技術指標。全部是確定性計算，不經過語言模型（PLAN §5）。

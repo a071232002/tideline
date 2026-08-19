@@ -1,7 +1,7 @@
-import type { Bar } from './types.js'
-import { sma, bollinger, kd, percentB, bandwidth } from './indicators.js'
-import { computeLevels, type Levels, type Market } from './levels.js'
-import { buildVerdict, levelReasons, type Verdict } from './verdict.js'
+import type { Bar } from './types'
+import { sma, bollinger, kd, percentB, bandwidth } from './indicators'
+import { computeLevels, type Levels, type Market } from './levels'
+import { buildVerdict, levelReasons, type Verdict } from './verdict'
 
 /**
  * 把一串 K 棒變成「一天的分析」。這是 PLAN §5 第 1～3 層的組裝點，

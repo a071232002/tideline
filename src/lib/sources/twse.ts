@@ -1,4 +1,4 @@
-import type { Bar } from '../types.js'
+import type { Bar } from '../types'
 
 /**
  * TWSE 個股日成交（上市）。**台股的主來源**。
@@ -37,13 +37,35 @@ function num(s: string | undefined): number | null {
   return Number.isFinite(v) ? v : null
 }
 
-/** 抓某一個月的日線。`yyyymm` 例如 `202608`。 */
-export async function fetchTwseMonth(stockNo: string, yyyymm: string): Promise<Bar[]> {
-  const url = `${BASE}?response=json&date=${yyyymm}01&stockNo=${encodeURIComponent(stockNo)}`
-  const res = await fetch(url, { headers: { 'User-Agent': UA } })
-  if (!res.ok) throw new Error(`TWSE ${stockNo} ${yyyymm} HTTP ${res.status}`)
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-  const json = (await res.json()) as TwseResponse
+/**
+ * 抓某一個月的日線。`yyyymm` 例如 `202608`。
+ *
+ * TWSE 會限流，而且**限流時回的是 HTML 錯誤頁不是 JSON**——直接 `res.json()`
+ * 會炸成看不懂的 `Unexpected token '<'`。所以這裡先確認拿到的是 JSON，
+ * 不是就當成暫時性失敗退避重試。
+ */
+export async function fetchTwseMonth(
+  stockNo: string, yyyymm: string, retries = 3,
+): Promise<Bar[]> {
+  const url = `${BASE}?response=json&date=${yyyymm}01&stockNo=${encodeURIComponent(stockNo)}`
+
+  let text = ''
+  let lastErr = ''
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) await sleep(1500 * attempt) // 線性退避
+
+    const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } })
+    if (!res.ok) { lastErr = `HTTP ${res.status}`; continue }
+
+    text = (await res.text()).trim()
+    if (text.startsWith('{')) { lastErr = ''; break }
+    lastErr = '被限流（回傳 HTML 而非 JSON）'
+  }
+  if (lastErr) throw new Error(`TWSE ${stockNo} ${yyyymm}：${lastErr}，已重試 ${retries} 次`)
+
+  const json = JSON.parse(text) as TwseResponse
   if (json.stat !== 'OK') {
     // 未來的月份或不存在的代號會回這個，不是錯誤
     if (/沒有符合條件|查無資料/.test(json.stat ?? '')) return []
@@ -74,12 +96,13 @@ export function recentMonths(months: number, from = new Date()): string[] {
 /**
  * 抓最近 `months` 個月的日線，由舊到新，已去重排序。
  *
- * 每次請求之間留 `delayMs` 的間隔——TWSE 沒有公開速率限制，保守一點。
+ * 每次請求之間留 `delayMs` 的間隔。實測 400ms 會被限流（回 HTML 錯誤頁），
+ * 所以預設拉到 1200ms——九個月一檔約 11 秒，一天跑一次完全可以接受。
  */
 export async function fetchTwseDailyBars(
   stockNo: string,
   months = 9,
-  delayMs = 400,
+  delayMs = 1200,
 ): Promise<Bar[]> {
   const byDate = new Map<string, Bar>()
   for (const ym of recentMonths(months)) {

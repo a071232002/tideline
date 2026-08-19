@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import fixture from './fixtures/0050.json'
-import { bollinger, sma } from '../src/lib/indicators.js'
+import { bollinger, sma } from '../src/lib/indicators'
 import {
   pivotHighs, pivotLows, sellZone, addZone, fairZone, stopLevel, roundToTick,
   tickFor, roundLevelAbove,
-} from '../src/lib/levels.js'
-import type { Bar } from '../src/lib/types.js'
+} from '../src/lib/levels'
+import type { Bar } from '../src/lib/types'
 
 const bars = fixture.bars as Bar[]
 const exp = fixture.expected

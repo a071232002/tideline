@@ -7,10 +7,10 @@
  *   npm run demo                 # 用預設清單
  *   npm run demo -- 2330 NVDA    # 指定標的
  */
-import { fetchTwseDailyBars } from '../src/lib/sources/twse.js'
-import { fetchYahooDailyBars } from '../src/lib/sources/yahoo.js'
-import { analyze } from '../src/lib/analyze.js'
-import type { Bar } from '../src/lib/types.js'
+import { fetchTwseDailyBars } from '../src/lib/sources/twse'
+import { fetchYahooDailyBars } from '../src/lib/sources/yahoo'
+import { analyze } from '../src/lib/analyze'
+import type { Bar } from '../src/lib/types'
 
 interface Target {
   market: 'TW' | 'US'

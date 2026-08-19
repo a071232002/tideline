@@ -1,4 +1,4 @@
-import type { Bar, BollingerBands } from './types.js'
+import type { Bar, BollingerBands } from './types'
 
 /**
  * 關鍵價位（PLAN §4）。

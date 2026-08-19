@@ -36,3 +36,13 @@ __pycache__/
 .DS_Store
 Thumbs.db
 /.claude/
+
+# supabase 本機執行產物
+supabase/.branches/
+supabase/.temp/
+
+# --- 本機截圖與測試產物 ---
+/*.png
+.playwright-mcp/
+supabase/snippets/
+supabase/functions/

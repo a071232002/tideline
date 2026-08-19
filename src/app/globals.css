@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+/*
+ * 色彩與間距沿用 docs/reference 那份範本——它是人手寫的、字級層次清楚、
+ * 用色克制，本身就是「非 AI 感」的樣本（PLAN §3）。
+ * 深色是一等公民：所有顏色都走變數，SVG 的線條也是，
+ * 不然深色模式下圖會消失。
+ */
+:root {
+  /* 暖紙色底，卡片比底色亮一階——原本 #f9f9f7 底配 #fcfcfb 卡片幾乎同色，
+     整頁看起來就是一片白，分不出層次。現在底色壓深、卡片提亮，
+     再加上實線邊框，卡片才會真的「浮」在紙上。 */
+  --bg: #ece8de;
+  --card: #fbf9f4;
+  --ink: #2b2926;
+  --ink2: #63605a;
+  --muted: #8b877d;
+  --line: #d8d3c6;
+  --blue: #1f6fd0;
+  --orange: #d9591f;
+  --sell: #c22f2f;
+  --stop: #cf6316;
+  --buy: #17683a;
+  --bandfill: rgba(31, 111, 208, .10);
+  --bandline: #b9b4a6;
+  --shadow: 0 1px 2px rgba(60, 52, 34, .07), 0 4px 12px rgba(60, 52, 34, .05);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16150f;
+    --card: #21201a;
+    --ink: #ebe8df;
+    --ink2: #b2ada0;
+    --muted: #8b8778;
+    --line: #37352c;
+    --blue: #5b9df0;
+    --orange: #e57a45;
+    --sell: #ef7676;
+    --stop: #e08a4a;
+    --buy: #4fbb7a;
+    --bandfill: rgba(91, 157, 240, .13);
+    --bandline: #4c493d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 4px 14px rgba(0, 0, 0, .35);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
+  line-height: 1.55;
+}
+
+/* 數字要能上下對照，所以用等寬 */
+.tnum { font-variant-numeric: tabular-nums; }
+
+.wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px 40px; }
+
+.badge {
+  display: inline-block; background: var(--card); border: 1px solid var(--line);
+  border-radius: 99px; padding: 2px 10px; font-size: .75rem; color: var(--ink2);
+  margin-left: 6px; white-space: nowrap;
+}
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 20px; margin: 14px 0; box-shadow: var(--shadow);
+}
+
+.tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin: 18px 0;
+}
+.tile {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px 16px; box-shadow: var(--shadow);
+}
+.tile .lab { font-size: .75rem; color: var(--muted); letter-spacing: .02em; }
+.tile .val { font-size: 1.5rem; font-weight: 700; margin-top: 2px; }
+.tile .det { font-size: .78rem; color: var(--ink2); margin-top: 4px; }
+
+.down { color: var(--sell); }
+.upc { color: var(--buy); }
+
+.headline { font-size: 1.15rem; font-weight: 800; margin: 0 0 10px; }
+.clist { margin: 0; padding: 0; list-style: none; font-size: .9rem; color: var(--ink2); }
+.clist li { margin: 3px 0; }
+.clist b { color: var(--ink); }
+.fine {
+  font-size: .72rem; color: var(--muted); margin-top: 12px;
+  border-top: 1px solid var(--line); padding-top: 8px;
+}
+
+/* 關鍵價位：窄螢幕改成上下排，不要硬擠三欄 */
+.lvl {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 12px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+}
+.lvl:last-child { border-bottom: none; }
+.lvl .name { flex: 0 0 96px; font-weight: 700; font-size: .95rem; }
+.lvl .price { flex: 0 0 150px; font-size: 1.55rem; font-weight: 800; }
+.lvl .why { font-size: .85rem; color: var(--ink2); flex: 1 1 260px; }
+@media (max-width: 520px) {
+  .lvl { gap: 4px; }
+  .lvl .name, .lvl .price { flex: 1 1 100%; }
+  .lvl .price { font-size: 1.35rem; }
+}
+
+.sellc { color: var(--sell); }
+.stopc { color: var(--stop); }
+.buyc { color: var(--buy); }
+
+h1 { font-size: 1.35rem; margin: 0 0 4px; }
+h2 { font-size: 1rem; margin: 0 0 10px; }
+.sub { color: var(--ink2); font-size: .85rem; }
+
+/* SVG 一律隨容器縮放，絕不橫向捲動 */
+svg { width: 100%; height: auto; display: block; }
+.grid { stroke: var(--line); stroke-width: 1; }
+.refline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.tick { fill: var(--muted); font-size: 11px; }
+.closeline { stroke: var(--blue); stroke-width: 2; stroke-linejoin: round; fill: none; }
+.midline2 { stroke: var(--orange); stroke-width: 2; stroke-linejoin: round; fill: none; }
+.bandline { stroke: var(--bandline); stroke-width: 1.2; fill: none; }
+.bandfill { fill: var(--bandfill); }
+
+.legend {
+  display: flex; flex-wrap: wrap; gap: 14px; font-size: .78rem;
+  color: var(--ink2); margin-top: 8px;
+}
+.legend .sw {
+  display: inline-block; width: 18px; height: 0; border-top: 2.5px solid;
+  vertical-align: middle; margin-right: 5px; border-radius: 2px;
+}
+.dash { border-top-style: dashed !important; }
+
+a { color: inherit; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 8px; padding: 8px 14px; font-size: .9rem; cursor: pointer;
+}
+.btn:disabled { opacity: .55; cursor: progress; }
+
+.input {
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 8px; padding: 8px 12px; font-size: .9rem; min-width: 0;
+}
+
+.err { color: var(--sell); font-size: .85rem; margin-top: 8px; }
+.empty { color: var(--ink2); font-size: .9rem; }
+
+
+/* ------------------------------------------------------------ 加入表單 */
+.addform {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.addform .err, .addform .okmsg { grid-column: 1 / -1; margin: 2px 0 0; }
+.okmsg { font-size: .85rem; color: var(--buy); }
+
+@media (max-width: 520px) {
+  .addform { grid-template-columns: 1fr auto; }
+  .addform .seg { grid-column: 1 / -1; }
+}
+
+/* 市場切換：分段控制項，比下拉選單少一次點擊，而且兩個選項一眼看得到 */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.segbtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink2);
+  font: inherit;
+  font-size: .88rem;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+.segbtn + .segbtn { border-left: 1px solid var(--line); }
+.segbtn.on {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+.segbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+/* 清單列在窄螢幕改成堆疊，桌機維持一列 */
+.row {
+  display: grid;
+  grid-template-columns: 150px 150px 1fr auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.row:last-child { border-bottom: none; }
+@media (max-width: 720px) {
+  .row { grid-template-columns: 1fr auto; gap: 6px 12px; }
+  .row .rprice { grid-column: 1; }
+  .row .rwhy { grid-column: 1 / -1; }
+  .row form { grid-row: 1; grid-column: 2; }
+}
+
+/* ---------------------------------------------------- 決策條（關鍵價位） */
+/* 每天要回答的問題只有三個，答案就擺在最前面，不要藏在句子裡 */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+.stripcell {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px 12px;
+  box-shadow: var(--shadow);
+}
+.striplab {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+.stripval {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+.striprange { font-size: 1.15rem; font-weight: 700; opacity: .85; }
+.striphint {
+  font-size: .75rem;
+  color: var(--muted);
+  margin-top: 5px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stripgap { color: var(--ink2); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .strip { grid-template-columns: 1fr; gap: 8px; }
+  .stripcell { padding: 10px 14px 9px; }
+  .stripval { font-size: 1.5rem; }
+}
+
+/* 清單列的緊湊版價位 */
+.inlinelvl { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.inlinecell { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.inlinelab { font-size: .72rem; color: var(--muted); }
