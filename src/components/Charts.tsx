@@ -64,11 +64,21 @@ export function PriceChart({
         .map((p) => `L${x(p.i).toFixed(1)},${y(p.band!.lo).toFixed(1)}`).join('') + 'Z'
     : ''
 
-  const digits = currency === 'TWD' ? 0 : 0
+  const digits = 0
   const hlines: { v: number; cls: string; label: string }[] = []
   if (levels.sell) hlines.push({ v: levels.sell[0], cls: 'sellc', label: '賣出' })
   if (typeof levels.stop === 'number') hlines.push({ v: levels.stop, cls: 'stopc', label: '止跌' })
   if (levels.add) hlines.push({ v: levels.add[1], cls: 'buyc', label: '加碼' })
+
+  // 區間畫成色帶而不是單線——「現在離哪個區還有多遠」用看的就知道，
+  // 不必回頭讀數字。單線只告訴你邊界在哪，說不出區間有多寬。
+  const zones: { lo: number; hi: number; varName: string }[] = []
+  if (levels.sell) zones.push({ lo: levels.sell[0], hi: levels.sell[1], varName: 'sell' })
+  if (levels.add) zones.push({ lo: levels.add[0], hi: levels.add[1], varName: 'buy' })
+
+  // 最後一天的位置：眼睛要有個著陸點，否則得自己找線的end
+  const lastI = bars.length - 1
+  const lastC = bars[lastI]!.c
 
   const labelEvery = Math.ceil(bars.length / 6)
 
@@ -80,6 +90,11 @@ export function PriceChart({
             <line className="grid" x1={ML} y1={y(v)} x2={W - 14} y2={y(v)} />
             <text className="tick" x={ML - 6} y={y(v) + 4} textAnchor="end">{v.toFixed(digits)}</text>
           </g>
+        ))}
+        {zones.map((z) => (
+          <rect key={z.varName} x={ML} y={Math.min(y(z.hi), y(z.lo))}
+            width={PW} height={Math.max(Math.abs(y(z.lo) - y(z.hi)), 2)}
+            style={{ fill: `var(--${z.varName})`, opacity: .10 }} />
         ))}
         {fill && <path className="bandfill" d={fill} />}
         {upPath && <path className="bandline" d={upPath} />}
@@ -103,7 +118,9 @@ export function PriceChart({
                 <g key={h.label}>
                   <line className="refline" x1={ML} y1={lineY} x2={W - 14} y2={lineY}
                     style={{ stroke: `var(--${varName})` }} />
-                  <text className="tick" x={W - 16} y={labelY} textAnchor="end"
+                  {/* 價位標籤放左側。右邊留給「今天的價格」那個端點標籤，
+                      兩邊都擠在右緣會疊在一起。 */}
+                  <text className="tick" x={ML + 6} y={labelY} textAnchor="start"
                     style={{ fill: `var(--${varName})`, fontWeight: 600 }}>
                     {h.label} {h.v.toFixed(2)}
                   </text>
@@ -111,12 +128,22 @@ export function PriceChart({
               )
             })
         })()}
+        {/* 今天在哪：端點圓點＋收盤價標籤 */}
+        <circle cx={x(lastI)} cy={y(lastC)} r={4} className="hoverdot"
+          style={{ fill: 'var(--blue)' }} />
+        <circle cx={x(lastI)} cy={y(lastC)} r={7.5} fill="none"
+          style={{ stroke: 'var(--blue)', opacity: .35 }} />
+        <text x={x(lastI) - 12} y={y(lastC) - 12} textAnchor="end"
+          style={{ fill: 'var(--blue)', fontWeight: 800, fontSize: 13 }}>
+          {lastC.toFixed(2)}
+        </text>
+
         {bars.map((b, i) => (i % labelEvery === 0 ? (
           <text key={b.d} className="tick" x={x(i)} y={H - 6} textAnchor="middle">{b.d.slice(5)}</text>
         ) : null))}
       </svg>
       <div className="legend">
-        <span><i className="sw" style={{ borderColor: 'var(--blue)' }} />收盤價</span>
+        <span><i className="sw" style={{ borderColor: 'var(--blue)' }} />收盤價（末點＝今日）</span>
         <span><i className="sw" style={{ borderColor: 'var(--orange)' }} />布林中軌</span>
         <span><i className="sw" style={{ borderColor: 'var(--bandline)' }} />上下軌</span>
         <span><i className="sw dash" style={{ borderColor: 'var(--sell)' }} />賣出</span>
@@ -153,6 +180,10 @@ export function KdChart({ points }: { points: { d: string; k: number; d_val: num
         ))}
         <path className="closeline" d={kPath} />
         <path className="midline2" d={dPath} />
+        <circle cx={x(points.length - 1)} cy={y(points[points.length - 1]!.k)} r={3.5}
+          style={{ fill: 'var(--blue)' }} />
+        <circle cx={x(points.length - 1)} cy={y(points[points.length - 1]!.d_val)} r={3.5}
+          style={{ fill: 'var(--orange)' }} />
         {points.map((p, i) => (i % labelEvery === 0 ? (
           <text key={p.d} className="tick" x={x(i)} y={H - 6} textAnchor="middle">{p.d.slice(5)}</text>
         ) : null))}

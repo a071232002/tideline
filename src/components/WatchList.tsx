@@ -5,6 +5,7 @@ import { SubmitButton } from './SubmitButton'
 import { LevelInline } from './LevelStrip'
 import { MarketFilter, type Filter } from './MarketFilter'
 import { levelStatus } from '@/lib/status'
+import { sortRows, type SortMode } from '@/lib/sorting'
 import type { WatchRow } from '@/lib/data'
 
 function pct(v: number | null): string {
@@ -17,6 +18,12 @@ function money(v: number | null): string {
   return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+const SORTS: { key: SortMode; label: string }[] = [
+  { key: 'attention', label: '該注意的' },
+  { key: 'change', label: '跌幅' },
+  { key: 'code', label: '代號' },
+]
+
 export function WatchList({
   rows,
   removeAction,
@@ -25,6 +32,7 @@ export function WatchList({
   removeAction: (formData: FormData) => void
 }) {
   const [filter, setFilter] = useState<Filter>('ALL')
+  const [sort, setSort] = useState<SortMode>('attention')
 
   const counts = useMemo(() => ({
     ALL: rows.length,
@@ -32,11 +40,28 @@ export function WatchList({
     US: rows.filter((r) => r.market === 'US').length,
   }), [rows])
 
-  const shown = filter === 'ALL' ? rows : rows.filter((r) => r.market === filter)
+  const shown = useMemo(() => {
+    const filtered = filter === 'ALL' ? rows : rows.filter((r) => r.market === filter)
+    return sortRows(filtered, sort)
+  }, [rows, filter, sort])
 
   return (
     <>
-      <MarketFilter counts={counts} onChange={setFilter} />
+      <div className="listbar">
+        <MarketFilter counts={counts} onChange={setFilter} />
+        <div className="sortbar" role="group" aria-label="排序">
+          <span className="sortlab">排序</span>
+          {SORTS.map((s) => (
+            <button key={s.key} type="button"
+              data-testid={`sort-${s.key}`}
+              aria-pressed={sort === s.key}
+              className={`sorttag${sort === s.key ? ' on' : ''}`}
+              onClick={() => setSort(s.key)}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {shown.length === 0 ? (
         <div className="card">

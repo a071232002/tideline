@@ -370,3 +370,56 @@ a { color: inherit; }
   border-radius: 99px;
   border: 1px solid currentColor;
 }
+
+/* 全域資料狀態 */
+.freshness { font-size: .82rem; }
+.freshness.tone-warn {
+  color: var(--sell);
+  font-weight: 700;
+  border: 1px solid currentColor;
+  border-radius: 99px;
+  padding: 2px 10px;
+  background: color-mix(in srgb, var(--sell) 9%, transparent);
+}
+.freshness.tone-muted { color: var(--ink2); font-weight: 600; }
+.freshness.tone-none { color: var(--muted); }
+
+/* 篩選 + 排序同一列 */
+.listbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+}
+.listbar .filters { margin: 0; }
+.sortbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sortlab { font-size: .75rem; color: var(--muted); }
+.sorttag {
+  appearance: none; font: inherit; font-size: .8rem;
+  padding: 4px 10px; border-radius: 7px; cursor: pointer;
+  border: 1px solid transparent; background: transparent; color: var(--ink2);
+}
+.sorttag:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.sorttag.on {
+  border-color: var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 700;
+}
+.sorttag:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+/* 手機第一屏：加入表單預設收起，清單才是第一眼看到的東西 */
+.addtoggle {
+  appearance: none; font: inherit; font-size: .85rem; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink2);
+  border-radius: 8px; padding: 7px 14px; margin: 10px 0 4px;
+  display: none;
+}
+.addtoggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .addtoggle { display: inline-block; }
+  .addform.collapsed { display: none; }
+}

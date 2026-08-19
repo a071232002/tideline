@@ -2,6 +2,7 @@ import { unstable_cache, revalidateTag } from 'next/cache'
 import { createClient } from './supabase/server'
 import { createAdminClient } from './supabase/admin'
 import { CHART_BARS } from './pipeline'
+import { dataFreshness, taipeiToday, type Freshness } from './freshness'
 
 /**
  * 讀取層。資料一天只變一次，非常適合快取——但也因此**快取沒清就是整天看到舊資料**。
@@ -28,6 +29,25 @@ export interface WatchRow {
   /** 定調那半句（「短線轉弱、波段中性」），價位另外用 levels 呈現 */
   tone: string | null
   levels: { kind: 'sell' | 'stop' | 'add'; lo: number; hi?: number }[]
+}
+
+/**
+ * 全站的資料新鮮度。每列各自寫「資料日期」不夠——排程整個沒跑時四列會一起
+ * 顯示舊日期，使用者只會以為今天休市（PLAN §7）。
+ */
+export async function getFreshness(): Promise<Freshness> {
+  const db = createAdminClient()
+  const { data: jobs } = await db.from('job_runs')
+    .select('finished_at, ok').eq('ok', true)
+    .order('finished_at', { ascending: false }).limit(1)
+  const { data: bars } = await db.from('daily_bars')
+    .select('d').order('d', { ascending: false }).limit(1)
+
+  return dataFreshness({
+    lastOkAt: (jobs?.[0]?.finished_at as string) ?? null,
+    latestBarDate: (bars?.[0]?.d as string) ?? null,
+    today: taipeiToday(),
+  })
 }
 
 /** 觀察清單總覽：一列一檔含當日狀態。走使用者身分，RLS 保證看不到別人的。 */
