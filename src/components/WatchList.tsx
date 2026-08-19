@@ -111,16 +111,19 @@ export function WatchList({
                 )}
               </div>
 
+              {/* 漲跌幅獨立一行：跟收盤價並排的話，四位數的高價股（2330 約 2,350）
+                  會把百分比擠到下一行，各列就對不齊了。 */}
               <div className="rprice tnum">
-                <span className="rclose">{money(r.close)}</span>
-                <span className={r.chg_pct !== null && r.chg_pct < 0 ? 'down' : 'upc'}
-                  style={{ marginLeft: 8, fontSize: '.9rem', fontWeight: 600 }}>
-                  {pct(r.chg_pct)}
-                </span>
-                <div className="rkd">
-                  {r.k !== null && r.d_val !== null
-                    ? `K ${r.k.toFixed(1)} / D ${r.d_val.toFixed(1)}`
-                    : ''}
+                <div className="rclose">{money(r.close)}</div>
+                <div className="rchgline">
+                  {/* 台股紅漲綠跌 */}
+                  <span className={r.chg_pct !== null && r.chg_pct < 0 ? 'chg-down' : 'chg-up'}
+                    data-dir={r.chg_pct !== null && r.chg_pct < 0 ? 'down' : 'up'}>
+                    {pct(r.chg_pct)}
+                  </span>
+                  {r.k !== null && r.d_val !== null && (
+                    <span className="rkd">K {r.k.toFixed(1)} / D {r.d_val.toFixed(1)}</span>
+                  )}
                 </div>
               </div>
 

@@ -12,15 +12,29 @@
      再加上實線邊框，卡片才會真的「浮」在紙上。 */
   --bg: #ece8de;
   --card: #fbf9f4;
-  --ink: #2b2926;
-  --ink2: #63605a;
-  --muted: #8b877d;
+  /* 文字四階，用途固定不要混用：
+     ink   數字與標題（主角）
+     ink2  說明文字（讀得下去，但退一步）
+     muted 標籤與中繼資料（需要時才看）
+     faint 分隔線層級的文字（幾乎只是存在感） */
+  --ink: #23211d;
+  --ink2: #5c584f;
+  --muted: #8a857a;
+  --faint: #a8a396;
   --line: #d8d3c6;
   --blue: #1f6fd0;
   --orange: #d9591f;
+  /* 布林中軌用獨立色。原本跟 --stop 同為橘色，兩條線疊在圖上分不出來——
+     一條是指標（現在在哪），一條是動作價位（跌破要反應），意義完全不同。 */
+  --mid: #7a5cc4;
   --sell: #c22f2f;
   --stop: #cf6316;
   --buy: #17683a;
+  /* 漲跌方向與買賣動作是**兩件事**，各用一組色票，不要互相借用：
+     台股是紅漲綠跌（跟美股相反）。參考範本用的是美式的綠漲紅跌，
+     這裡刻意不照抄——這個站是給台股使用者每天看的。 */
+  --up: #c62828;    /* 漲 */
+  --down: #1b7a3e;  /* 跌 */
   --bandfill: rgba(31, 111, 208, .10);
   --bandline: #b9b4a6;
   --shadow: 0 1px 2px rgba(60, 52, 34, .07), 0 4px 12px rgba(60, 52, 34, .05);
@@ -37,15 +51,19 @@
   :root:not([data-theme="light"]) {
     --bg: #16150f;
     --card: #21201a;
-    --ink: #ebe8df;
-    --ink2: #b2ada0;
-    --muted: #8b8778;
+    --ink: #f0ede4;
+    --ink2: #b6b0a2;
+    --muted: #8a8576;
+    --faint: #6d685c;
     --line: #37352c;
     --blue: #5b9df0;
     --orange: #e57a45;
+    --mid: #a98ce0;
     --sell: #ef7676;
     --stop: #e08a4a;
     --buy: #4fbb7a;
+    --up: #f0665f;
+    --down: #4bb56f;
     --bandfill: rgba(91, 157, 240, .13);
     --bandline: #4c493d;
     --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 4px 14px rgba(0, 0, 0, .35);
@@ -62,9 +80,12 @@
   --line: #37352c;
   --blue: #5b9df0;
   --orange: #e57a45;
+  --mid: #a98ce0;
   --sell: #ef7676;
   --stop: #e08a4a;
   --buy: #4fbb7a;
+  --up: #f0665f;
+  --down: #4bb56f;
   --bandfill: rgba(91, 157, 240, .13);
   --bandline: #4c493d;
   --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 4px 14px rgba(0, 0, 0, .35);
@@ -79,18 +100,55 @@ body {
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
     "Microsoft JhengHei", sans-serif;
-  line-height: 1.55;
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* 數字要能上下對照，所以用等寬 */
-.tnum { font-variant-numeric: tabular-nums; }
+/* ------------------------------------------------------------------ 字級
+ *
+ * 這個站的「顯示字體」其實是**數字**——每天要讀的是價位，中文是說明。
+ * 之前散落 17 種字級、數字跟說明文字幾乎一樣重，層級因此是平的。
+ *
+ * 兩條級數：中文一條、數字一條。數字比同級中文大一階，才拿得回主角位置。
+ * 中文的下限訂在 12px——11px 的中文筆畫會糊掉，跟拉丁字母不一樣。
+ */
+:root {
+  --t-micro: .75rem;    /* 12  中繼資料：K/D、資料日期 */
+  --t-label: .8125rem;  /* 13  欄位標籤、徽章 */
+  --t-body: .875rem;    /* 14  理由、說明 */
+  --t-lead: 1rem;       /* 16  判斷句、卡片標題 */
+  --t-title: 1.375rem;  /* 22  頁面標題 */
+
+  --n-sm: 1.125rem;     /* 18  代號 */
+  --n-md: 1.5rem;       /* 24  清單收盤價、四格數值 */
+  --n-lg: 1.875rem;     /* 30  決策條價位 */
+
+  /* 中文需要比拉丁字母鬆一點的行高才不擁擠 */
+  --lh-tight: 1.2;
+  --lh-normal: 1.65;
+}
+
+/* 數字：等寬對齊、收緊字距、行高壓低——它們是被「看」的，不是被「讀」的 */
+.tnum, .rclose, .stripval, .price, .val {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+  line-height: var(--lh-tight);
+}
+
+/* 標籤要看起來像標籤，不要像資料。加字距、降字重對比，是最省力的區分方式 */
+.lab, .striplab, .inlinelab, .listhead, .sortlab, .filtercount {
+  font-size: var(--t-label);
+  letter-spacing: .05em;
+  color: var(--muted);
+}
 
 .wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px 40px; }
 
 .badge {
   display: inline-block; background: var(--card); border: 1px solid var(--line);
-  border-radius: 99px; padding: 2px 10px; font-size: .75rem; color: var(--ink2);
-  margin-left: 6px; white-space: nowrap;
+  border-radius: 99px; padding: 2px 9px; font-size: var(--t-micro); color: var(--muted);
+  margin-left: 6px; white-space: nowrap; letter-spacing: .03em;
 }
 
 .card {
@@ -106,20 +164,33 @@ body {
   background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   padding: 14px 16px; box-shadow: var(--shadow);
 }
-.tile .lab { font-size: .75rem; color: var(--muted); letter-spacing: .02em; }
-.tile .val { font-size: 1.5rem; font-weight: 700; margin-top: 2px; }
-.tile .det { font-size: .78rem; color: var(--ink2); margin-top: 4px; }
+.tile .lab { color: var(--muted); }
+.tile .val { font-size: var(--n-md); font-weight: 800; margin-top: 4px; color: var(--ink); }
+.tile .det { font-size: var(--t-micro); color: var(--ink2); margin-top: 6px; line-height: 1.5; }
 
-.down { color: var(--sell); }
-.upc { color: var(--buy); }
+/* 漲跌顏色。名字直接叫 up/down，不要再用 sell/buy——
+   那兩個是「該做什麼」，這兩個是「今天走了哪個方向」。 */
+.chg-up { color: var(--up); font-weight: 600; }
+.chg-down { color: var(--down); font-weight: 600; }
 
-.headline { font-size: 1.15rem; font-weight: 800; margin: 0 0 10px; }
-.clist { margin: 0; padding: 0; list-style: none; font-size: .9rem; color: var(--ink2); }
+.headline {
+  font-size: var(--t-lead);
+  font-weight: 800;
+  line-height: 1.55;
+  margin: 0 0 12px;
+}
+.clist {
+  margin: 0; padding: 0; list-style: none;
+  font-size: var(--t-body);
+  line-height: var(--lh-normal);
+  color: var(--ink2);
+}
 .clist li { margin: 3px 0; }
 .clist b { color: var(--ink); }
 .fine {
-  font-size: .72rem; color: var(--muted); margin-top: 12px;
-  border-top: 1px solid var(--line); padding-top: 8px;
+  font-size: var(--t-micro); color: var(--faint); margin-top: 14px;
+  line-height: 1.6;
+  border-top: 1px solid var(--line); padding-top: 10px;
 }
 
 /* 關鍵價位：窄螢幕改成上下排，不要硬擠三欄 */
@@ -128,22 +199,35 @@ body {
   padding: 12px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap;
 }
 .lvl:last-child { border-bottom: none; }
-.lvl .name { flex: 0 0 96px; font-weight: 700; font-size: .95rem; }
-.lvl .price { flex: 0 0 150px; font-size: 1.55rem; font-weight: 800; }
-.lvl .why { font-size: .85rem; color: var(--ink2); flex: 1 1 260px; }
+.lvl .name { flex: 0 0 96px; font-weight: 700; font-size: var(--t-body); letter-spacing: .03em; }
+.lvl .price { flex: 0 0 150px; font-size: var(--n-md); font-weight: 800; }
+.lvl .why { font-size: var(--t-body); color: var(--ink2); flex: 1 1 260px; line-height: var(--lh-normal); }
 @media (max-width: 520px) {
   .lvl { gap: 4px; }
   .lvl .name, .lvl .price { flex: 1 1 100%; }
-  .lvl .price { font-size: 1.35rem; }
+  .lvl .price { font-size: var(--n-sm); }
 }
 
 .sellc { color: var(--sell); }
 .stopc { color: var(--stop); }
 .buyc { color: var(--buy); }
 
-h1 { font-size: 1.35rem; margin: 0 0 4px; }
-h2 { font-size: 1rem; margin: 0 0 10px; }
-.sub { color: var(--ink2); font-size: .85rem; }
+h1 {
+  font-size: var(--t-title);
+  line-height: var(--lh-tight);
+  letter-spacing: .01em;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+/* 卡片標題：靠字距與顏色跟內文區隔，不要靠放大 */
+h2 {
+  font-size: var(--t-lead);
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--ink);
+  margin: 0 0 12px;
+}
+.sub { color: var(--ink2); font-size: var(--t-body); }
 
 /* 圖表 SVG 隨容器縮放，絕不橫向捲動。
    **只能挑 .chartsvg**——寫成 `svg {}` 會連介面圖示一起撐成 100% 寬，
@@ -153,12 +237,12 @@ h2 { font-size: 1rem; margin: 0 0 10px; }
 .refline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
 .tick { fill: var(--muted); font-size: 11px; }
 .closeline { stroke: var(--blue); stroke-width: 2; stroke-linejoin: round; fill: none; }
-.midline2 { stroke: var(--orange); stroke-width: 2; stroke-linejoin: round; fill: none; }
+.midline2 { stroke: var(--mid); stroke-width: 1.8; stroke-linejoin: round; fill: none; }
 .bandline { stroke: var(--bandline); stroke-width: 1.2; fill: none; }
 .bandfill { fill: var(--bandfill); }
 
 .legend {
-  display: flex; flex-wrap: wrap; gap: 14px; font-size: .78rem;
+  display: flex; flex-wrap: wrap; gap: 14px; font-size: var(--t-micro);
   color: var(--ink2); margin-top: 8px;
 }
 .legend .sw {
@@ -172,17 +256,17 @@ a { color: inherit; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--line); background: var(--card); color: var(--ink);
-  border-radius: 8px; padding: 8px 14px; font-size: .9rem; cursor: pointer;
+  border-radius: 8px; padding: 8px 14px; font-size: var(--t-body); cursor: pointer;
 }
 .btn:disabled { opacity: .55; cursor: progress; }
 
 .input {
   border: 1px solid var(--line); background: var(--card); color: var(--ink);
-  border-radius: 8px; padding: 8px 12px; font-size: .9rem; min-width: 0;
+  border-radius: 8px; padding: 9px 12px; font-size: var(--t-body); min-width: 0;
 }
 
-.err { color: var(--sell); font-size: .85rem; margin-top: 8px; }
-.empty { color: var(--ink2); font-size: .9rem; }
+.err { color: var(--sell); font-size: var(--t-body); margin-top: 8px; }
+.empty { color: var(--ink2); font-size: var(--t-body); line-height: var(--lh-normal); }
 
 
 /* ------------------------------------------------------------ 加入表單 */
@@ -193,7 +277,7 @@ a { color: inherit; }
   align-items: center;
 }
 .addform .err, .addform .okmsg { grid-column: 1 / -1; margin: 2px 0 0; }
-.okmsg { font-size: .85rem; color: var(--buy); }
+.okmsg { font-size: var(--t-body); color: var(--buy); }
 
 @media (max-width: 520px) {
   .addform { grid-template-columns: 1fr auto; }
@@ -214,7 +298,7 @@ a { color: inherit; }
   background: transparent;
   color: var(--ink2);
   font: inherit;
-  font-size: .88rem;
+  font-size: var(--t-body);
   padding: 7px 16px;
   cursor: pointer;
 }
@@ -230,7 +314,7 @@ a { color: inherit; }
 /* 清單列在窄螢幕改成堆疊，桌機維持一列 */
 .row {
   display: grid;
-  grid-template-columns: 150px 150px 1fr auto;
+  grid-template-columns: 150px 170px 1fr auto;
   gap: 14px;
   align-items: start;
   padding: 14px 18px;
@@ -260,23 +344,18 @@ a { color: inherit; }
   padding: 14px 16px 12px;
   box-shadow: var(--shadow);
 }
-.striplab {
-  font-size: .78rem;
-  font-weight: 700;
-  letter-spacing: .03em;
-}
+.striplab { font-weight: 700; }
 .stripval {
-  font-size: 1.75rem;
+  font-size: var(--n-lg);
   font-weight: 800;
-  line-height: 1.15;
-  margin-top: 4px;
+  margin-top: 6px;
   white-space: nowrap;
 }
-.striprange { font-size: 1.15rem; font-weight: 700; opacity: .85; }
+.striprange { font-size: var(--t-lead); font-weight: 700; opacity: .8; }
 .striphint {
-  font-size: .75rem;
+  font-size: var(--t-micro);
   color: var(--muted);
-  margin-top: 5px;
+  margin-top: 7px;
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -286,13 +365,13 @@ a { color: inherit; }
 @media (max-width: 640px) {
   .strip { grid-template-columns: 1fr; gap: 8px; }
   .stripcell { padding: 10px 14px 9px; }
-  .stripval { font-size: 1.5rem; }
+  .stripval { font-size: var(--n-md); }
 }
 
 /* 清單列的緊湊版價位 */
 .inlinelvl { display: flex; flex-wrap: wrap; gap: 4px 18px; }
 .inlinecell { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-.inlinelab { font-size: .72rem; color: var(--muted); }
+
 
 /* ---------------------------------------------------------- 市場篩選 tag */
 .filters {
@@ -304,7 +383,7 @@ a { color: inherit; }
 .filtertag {
   appearance: none;
   font: inherit;
-  font-size: .85rem;
+  font-size: var(--t-body);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -325,18 +404,36 @@ a { color: inherit; }
 }
 .filtertag:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .filtercount {
-  font-size: .75rem;
+  font-size: var(--t-micro);
   opacity: .7;
   font-weight: 600;
 }
 .filtertag.on .filtercount { opacity: .85; }
 
 /* 清單列的小字層級 */
-.rname { font-size: .8rem; color: var(--ink2); margin-top: 2px; }
-.rclose { font-size: 1.3rem; font-weight: 700; }
-.rkd { font-size: .75rem; color: var(--muted); margin-top: 2px; }
-.rmeta { font-size: .75rem; color: var(--muted); margin-top: 4px; }
-.pagehead { margin-bottom: 4px; }
+.rname { font-size: var(--t-micro); color: var(--ink2); margin-top: 3px; }
+.rclose { font-size: var(--n-md); font-weight: 800; color: var(--ink); }
+.rchgline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  font-size: var(--t-micro);
+  font-weight: 600;
+}
+.rkd { color: var(--faint); font-weight: 400; }
+.rmeta { font-size: var(--t-micro); color: var(--faint); margin-top: 6px; }
+.pagehead { margin: 18px 0 6px; }
+/* 眉標：一個字級最小、字距最開的分類詞。讓標題有立足點，而不是浮在空白裡。
+   內容是真的分類（這一頁在講什麼），不是裝飾。 */
+.eyebrow {
+  display: block;
+  font-size: var(--t-micro);
+  letter-spacing: .18em;
+  color: var(--faint);
+  margin-bottom: 4px;
+}
 
 /* 整列可點（stretched link）：連結本身只包代號，再用 ::after 把可點範圍
    撐滿整列。比「在子元素上關掉 pointer-events」好——那樣做連文字都收不到
@@ -351,14 +448,14 @@ a { color: inherit; }
 /* 移除鈕要浮在可點範圍之上，否則會變成「點移除卻進了個股頁」 */
 .row .rowaction { position: relative; z-index: 2; }
 .row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
-.rcode { font-weight: 700; font-size: 1.05rem; }
+.rcode { font-weight: 800; font-size: var(--n-sm); letter-spacing: .01em; }
 
 /* 破壞性動作低調處理 */
 .btnquiet {
   background: transparent;
   border-color: transparent;
   color: var(--muted);
-  font-size: .82rem;
+  font-size: var(--t-label);
   padding: 6px 10px;
 }
 .btnquiet:hover:not(:disabled) { color: var(--sell); border-color: var(--line); }
@@ -377,8 +474,9 @@ a { color: inherit; }
 /* 狀態徽章：只在真的接近或已到價位時出現。到處都有就等於沒有訊號。 */
 .statusbadge {
   display: inline-block;
-  margin-top: 5px;
-  font-size: .72rem;
+  margin-top: 7px;
+  font-size: var(--t-micro);
+  letter-spacing: .02em;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 99px;
@@ -392,7 +490,7 @@ a { color: inherit; }
 .pagestatus {
   display: inline-block;
   margin: 14px 0 0;
-  font-size: .85rem;
+  font-size: var(--t-body);
   font-weight: 700;
   padding: 5px 14px;
   border-radius: 99px;
@@ -400,7 +498,7 @@ a { color: inherit; }
 }
 
 /* 全域資料狀態 */
-.freshness { font-size: .82rem; }
+.freshness { font-size: var(--t-micro); letter-spacing: .02em; }
 .freshness.tone-warn {
   color: var(--sell);
   font-weight: 700;
@@ -423,9 +521,9 @@ a { color: inherit; }
 }
 .listbar .filters { margin: 0; }
 .sortbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.sortlab { font-size: .75rem; color: var(--muted); }
+
 .sorttag {
-  appearance: none; font: inherit; font-size: .8rem;
+  appearance: none; font: inherit; font-size: var(--t-label);
   padding: 4px 10px; border-radius: 7px; cursor: pointer;
   border: 1px solid transparent; background: transparent; color: var(--ink2);
 }
@@ -440,7 +538,7 @@ a { color: inherit; }
 
 /* 手機第一屏：加入表單預設收起，清單才是第一眼看到的東西 */
 .addtoggle {
-  appearance: none; font: inherit; font-size: .85rem; cursor: pointer;
+  appearance: none; font: inherit; font-size: var(--t-body); cursor: pointer;
   border: 1px solid var(--line); background: var(--card); color: var(--ink2);
   border-radius: 8px; padding: 7px 14px; margin: 10px 0 4px;
   display: none;
@@ -466,8 +564,8 @@ a { color: inherit; }
 }
 .brand {
   font-weight: 800;
-  font-size: 1rem;
-  letter-spacing: .02em;
+  font-size: var(--t-lead);
+  letter-spacing: .06em;
   text-decoration: none;
 }
 .topbarright { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -481,7 +579,7 @@ a { color: inherit; }
   background: var(--bg);
 }
 .themebtn {
-  appearance: none; font: inherit; font-size: .78rem; cursor: pointer;
+  appearance: none; font: inherit; font-size: var(--t-label); cursor: pointer;
   border: 0; background: transparent; color: var(--ink2); padding: 5px 11px;
 }
 .themebtn + .themebtn { border-left: 1px solid var(--line); }
@@ -491,11 +589,9 @@ a { color: inherit; }
 /* 清單表頭：價位標籤放這裡，列裡就不必每列重複三次 */
 .listhead {
   display: grid;
-  grid-template-columns: 150px 150px 1fr auto;
+  grid-template-columns: 150px 170px 1fr auto;
   gap: 14px;
-  padding: 0 18px 6px;
-  font-size: .72rem;
-  color: var(--muted);
+  padding: 0 18px 8px;
 }
 .listhead .lvlhead {
   display: grid;
@@ -539,7 +635,7 @@ a { color: inherit; }
 .btn.withicon { display: inline-flex; }
 .backlink {
   display: inline-flex;
-  font-size: .85rem; color: var(--ink2); text-decoration: none;
+  font-size: var(--t-body); color: var(--ink2); text-decoration: none;
   margin-bottom: 8px;
 }
 .backlink:hover { color: var(--ink); }
@@ -550,3 +646,26 @@ a { color: inherit; }
 }
 
 .freshgroup { display: inline-flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.fetchedat {
+  font-size: var(--t-micro);
+  color: var(--faint);
+  letter-spacing: .02em;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+/* 估值：刻意做得比關鍵價位安靜——它是參考，不是今天要做的決定 */
+.valgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 14px;
+}
+.valcell { min-width: 0; }
+.valnum {
+  font-size: var(--n-sm);
+  font-weight: 700;
+  color: var(--ink2);
+  margin-top: 3px;
+}
+.valhint { font-size: var(--t-micro); color: var(--faint); margin-top: 2px; }

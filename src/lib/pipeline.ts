@@ -2,6 +2,8 @@ import { createAdminClient } from './supabase/admin'
 import { fetchTwseDailyBars } from './sources/twse'
 import { fetchYahooDailyBars } from './sources/yahoo'
 import { analyze } from './analyze'
+import { RULES_VERSION } from './backfill'
+import { fetchTwseValuation, fetchYahooValuation } from './sources/valuation'
 import type { Bar } from './types'
 import type { Market } from './levels'
 
@@ -96,13 +98,41 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
       pct_b: a.pctB, bandwidth: a.bandwidth, ma60: a.ma60,
       levels: { ...a.levels, why: a.levelWhy },
       verdict: a.verdict,
+      // 當天真的產出的紀錄。回補永遠不會覆蓋它（PLAN §11）
+      origin: 'live',
+      rules_version: RULES_VERSION,
     })
     if (anErr) throw new Error(`寫入 daily_analysis 失敗：${anErr.message}`)
+
+    // 估值是加分項：抓不到就跳過，不能因為它失敗就讓整檔的技術分析也不見
+    try {
+      if (process.env.TIDELINE_FIXTURE === '1') throw new Error('fixture')
+      const v = sym.market === 'TW'
+        ? await fetchTwseValuation(sym.code, a.date.slice(0, 7).replace('-', ''))
+        : await fetchYahooValuation(sym.yahoo_symbol)
+      if (v && (v.pe !== null || v.pb !== null || v.dividendYield !== null)) {
+        await db.from('daily_valuation').upsert({
+          symbol_id: sym.id, d: a.date,
+          pe: v.pe, forward_pe: v.forwardPe, pb: v.pb, dividend_yield: v.dividendYield,
+          src: sym.market === 'TW' ? 'twse' : 'yahoo',
+        })
+      }
+    } catch {
+      // 估值抓不到不影響任何價位與圖表
+    }
 
     // daily_bars 只留 KEEP_BARS 根；daily_analysis 一列都不刪（PLAN §11）
     const cutoff = kept[0]?.date
     if (cutoff) {
       await db.from('daily_bars').delete().eq('symbol_id', sym.id).lt('d', cutoff)
+    }
+
+    // 比最新一根還新的資料要刪掉。upsert 只會新增或覆蓋，**不會移除來源
+    // 已經不再提供的那一根**——實測就發生過：盤中抓到一根還沒收盤的美股 K 棒，
+    // 抓取邏輯修好之後那根仍然躺在資料庫裡，讓頁面顯示錯的收盤日。
+    const newest = kept[kept.length - 1]?.date
+    if (newest) {
+      await db.from('daily_bars').delete().eq('symbol_id', sym.id).gt('d', newest)
     }
 
     return { code: sym.code, ok: true, bars: kept.length, date: a.date }

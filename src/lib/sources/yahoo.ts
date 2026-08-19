@@ -27,7 +27,11 @@ interface ChartJson {
   chart: {
     error: { code: string; description: string } | null
     result?: [{
-      meta: { currency?: string; exchangeName?: string; longName?: string; shortName?: string }
+      meta: {
+        currency?: string; exchangeName?: string; longName?: string; shortName?: string
+        regularMarketTime?: number
+        currentTradingPeriod?: { regular?: { start?: number; end?: number } }
+      }
       timestamp?: number[]
       events?: {
         dividends?: Record<string, { amount: number; date: number }>
@@ -44,6 +48,29 @@ interface ChartJson {
 
 function isoDay(epochSec: number): string {
   return new Date(epochSec * 1000).toISOString().slice(0, 10)
+}
+
+/**
+ * 丟掉還沒收盤的那一根。
+ *
+ * Yahoo 在盤中就會給出「今天」的 K 棒，但收盤價其實是當下報價、高低價只到現在為止。
+ * 存進去會讓當天的 KD、布林、均線全部錯掉，而且錯得很像對的——數字合理、
+ * 沒有任何錯誤訊息。實測台北 23:36（美股盤中）抓 NVDA 就會拿到這種半根。
+ *
+ * 判斷不到時段資訊就保守留著：寧可多一根，也不要無聲刪掉真的資料。
+ */
+export function dropUnfinishedSession(
+  bars: Bar[],
+  meta: { marketTime?: number; sessionEnd?: number },
+): Bar[] {
+  const { marketTime, sessionEnd } = meta
+  if (bars.length === 0) return bars
+  if (typeof marketTime !== 'number' || typeof sessionEnd !== 'number') return bars
+  if (marketTime >= sessionEnd) return bars // 已收盤
+
+  const last = bars[bars.length - 1]!
+  if (last.date !== isoDay(marketTime)) return bars
+  return bars.slice(0, -1)
 }
 
 /** 抓日線。`range` 用 Yahoo 的寫法：`6mo` / `1y` / `2y`。 */
@@ -79,12 +106,17 @@ export async function fetchYahooDailyBars(symbol: string, range = '1y'): Promise
     splits[isoDay(s.date)] = s.numerator / s.denominator
   }
 
+  const sorted = bars.sort((a, b) => (a.date < b.date ? -1 : 1))
+
   return {
     symbol,
     name: r.meta.longName ?? r.meta.shortName ?? null,
     currency: r.meta.currency ?? 'USD',
     exchange: r.meta.exchangeName ?? '',
-    bars: bars.sort((a, b) => (a.date < b.date ? -1 : 1)),
+    bars: dropUnfinishedSession(sorted, {
+      marketTime: r.meta.regularMarketTime,
+      sessionEnd: r.meta.currentTradingPeriod?.regular?.end,
+    }),
     dividends,
     splits,
   }

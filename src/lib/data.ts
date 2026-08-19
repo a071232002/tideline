@@ -125,9 +125,18 @@ export async function getWatchlist(): Promise<WatchRow[]> {
 export interface StockPage {
   symbol: { id: string; market: 'TW' | 'US'; code: string; name: string | null; currency: string }
   analysis: Record<string, unknown> | null
+  valuation: {
+    pe: number | null; forwardPe: number | null; pb: number | null
+    dividendYield: number | null; d: string
+  } | null
   bars: { d: string; o: number; h: number; l: number; c: number }[]
   bands: { d: string; mid: number; up: number; lo: number }[]
   kd: { d: string; k: number; d_val: number }[]
+  /** 當時每天說的價位，用來疊在走勢上回顧（PLAN §11） */
+  levelHistory: {
+    d: string; sellLo: number | null; stop: number | null
+    addLo: number | null; addHi: number | null; origin: string
+  }[]
   /** 當日有沒有成功跑過排程——用來分辨「休市」與「資料未更新」（PLAN §7） */
   lastJobOk: boolean
 }
@@ -152,6 +161,15 @@ export const getStockPage = unstable_cache(
 
     const { data: bars } = await db
       .from('daily_bars').select('d, o, h, l, c')
+      .eq('symbol_id', sym.id).order('d', { ascending: true })
+
+    const { data: val } = await db
+      .from('daily_valuation').select('*')
+      .eq('symbol_id', sym.id).order('d', { ascending: false }).limit(1).maybeSingle()
+
+    // 歷史建議：畫成疊圖才看得出「當時說的價位」後來有沒有意義
+    const { data: hist } = await db
+      .from('daily_analysis').select('d, levels, origin')
       .eq('symbol_id', sym.id).order('d', { ascending: true })
 
     const { data: jobs } = await db
@@ -181,12 +199,33 @@ export const getStockPage = unstable_cache(
         currency: sym.currency as string,
       },
       analysis: analysis ?? null,
+      valuation: val ? {
+        pe: val.pe === null ? null : Number(val.pe),
+        forwardPe: val.forward_pe === null ? null : Number(val.forward_pe),
+        pb: val.pb === null ? null : Number(val.pb),
+        dividendYield: val.dividend_yield === null ? null : Number(val.dividend_yield),
+        d: val.d as string,
+      } : null,
       bars: series.map((b) => ({
         d: b.d as string, o: b.o as number, h: b.h as number,
         l: b.l as number, c: b.c as number,
       })),
       bands,
       kd: [],
+      levelHistory: (hist ?? []).map((h) => {
+        const lv = h.levels as {
+          sell?: { lo: number } | null; stop?: { price: number } | null
+          add?: { lo: number; hi: number } | null
+        }
+        return {
+          d: h.d as string,
+          sellLo: lv?.sell?.lo ?? null,
+          stop: lv?.stop?.price ?? null,
+          addLo: lv?.add?.lo ?? null,
+          addHi: lv?.add?.hi ?? null,
+          origin: (h.origin as string) ?? 'live',
+        }
+      }),
       lastJobOk: Boolean(jobs?.[0]?.ok),
     }
   },

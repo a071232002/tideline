@@ -69,6 +69,9 @@ export interface MarketFreshness extends Freshness {
   label: string
   /** 這個市場最新一根 K 棒的日期 */
   barDate: string | null
+  /** 我們**什麼時候抓的**（台北時間 MM-DD HH:mm）。與收盤日是兩件事：
+      收盤日說「這是哪一場交易」，抓取時間說「這份資料多新」。 */
+  fetchedAt: string | null
 }
 
 /**
@@ -93,9 +96,11 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
   const label = LABEL[market]
   const ranToday = lastOkAt !== null && taipeiToday(new Date(lastOkAt)) === today
 
+  const fetchedAt = lastOkAt ? shortTime(lastOkAt) : null
+
   if (!ranToday) {
     return {
-      market, label, barDate: latestBarDate, kind: 'stale', tone: 'warn',
+      market, label, barDate: latestBarDate, fetchedAt, kind: 'stale', tone: 'warn',
       message: lastOkAt
         ? `${label}資料未更新（最後成功 ${shortTime(lastOkAt)}）`
         : `${label}資料未更新`,
@@ -105,13 +110,13 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
   const expected = expectedBarDate(market, today)
   if (latestBarDate === expected) {
     return {
-      market, label, barDate: latestBarDate, kind: 'fresh', tone: 'none',
+      market, label, barDate: latestBarDate, fetchedAt, kind: 'fresh', tone: 'none',
       message: `${label} ${latestBarDate} 收盤`,
     }
   }
 
   return {
-    market, label, barDate: latestBarDate, kind: 'holiday', tone: 'muted',
+    market, label, barDate: latestBarDate, fetchedAt, kind: 'holiday', tone: 'muted',
     message: latestBarDate
       ? `${label}休市，為 ${latestBarDate} 收盤`
       : `${label}尚無資料`,

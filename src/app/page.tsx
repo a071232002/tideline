@@ -14,9 +14,10 @@ export default async function HomePage() {
       <TopBar fresh={fresh} />
 
       <header className="pagehead">
+        <span className="eyebrow">每日技術分析</span>
         <h1>觀察清單</h1>
         <p className="sub">
-          每天收盤後更新
+          收盤後更新，指標與價位由程式計算
           <span className="badge">僅供參考，非投資建議</span>
         </p>
       </header>

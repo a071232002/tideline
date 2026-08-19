@@ -6,6 +6,7 @@ import { LevelStrip, type StripLevel } from '@/components/LevelStrip'
 import { levelStatus } from '@/lib/status'
 import { Icon } from '@/components/Icon'
 import { TopBar } from '@/components/TopBar'
+import { ValuationCard } from '@/components/ValuationCard'
 import { kd as computeKd } from '@/lib/indicators'
 
 export const dynamic = 'force-dynamic'
@@ -101,10 +102,11 @@ export default async function StockPage({
       <TopBar />
       <NavLink href="/" className="backlink"><Icon name="back" /><span>觀察清單</span></NavLink>
 
-      <header style={{ marginTop: 10 }}>
-        <h1>
-          {page.symbol.code} {page.symbol.name ?? ''} 每日技術分析
-        </h1>
+      <header className="pagehead">
+        <span className="eyebrow">
+          {page.symbol.market === 'TW' ? '台股' : '美股'}　{page.symbol.code}
+        </span>
+        <h1>{page.symbol.name ?? page.symbol.code}</h1>
         <p className="sub">
           資料日期 {String(a.d)}
           <span className="badge">已收盤</span>
@@ -125,7 +127,9 @@ export default async function StockPage({
       <section className="tiles">
         <div className="tile">
           <div className="lab">收盤價</div>
-          <div className={`val tnum ${down ? 'down' : 'upc'}`} data-testid="close">{fmt(close)}</div>
+          {/* 台股紅漲綠跌——與參考範本相反，那份用的是美式配色 */}
+          <div className={`val tnum ${down ? 'chg-down' : 'chg-up'}`}
+            data-testid="close" data-dir={down ? 'down' : 'up'}>{fmt(close)}</div>
           <div className="det tnum">
             {down ? '▼' : '▲'}{fmt(Math.abs(chg ?? 0))}（{chgPct === null ? '—' : `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`}）
             　開 {fmt(n(a.o))}｜高 {fmt(n(a.h))}｜低 {fmt(n(a.l))}
@@ -204,6 +208,9 @@ export default async function StockPage({
         )}
       </section>
 
+      <ValuationCard valuation={page.valuation} market={page.symbol.market}
+        code={page.symbol.code} />
+
       <section className="card">
         <h2>近 6 個月收盤價與布林通道</h2>
         <PriceChart
@@ -215,6 +222,7 @@ export default async function StockPage({
             add: levels.add ? [levels.add.lo, levels.add.hi] : null,
           }}
           currency={cur}
+          history={page.levelHistory}
         />
       </section>
 

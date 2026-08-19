@@ -23,6 +23,13 @@ export function TopBar({ fresh }: { fresh?: MarketFreshness[] }) {
               {f.message}
             </span>
           ))}
+          {/* 收盤日與抓取時間是兩件事：前者說「這是哪一場交易」，
+              後者說「這份資料多新」。只給日期看不出後者。 */}
+          {fresh[0]?.fetchedAt && (
+            <span className="fetchedat" data-testid="fetched-at">
+              {fresh[0].fetchedAt} 抓取
+            </span>
+          )}
         </span>
       )}
 

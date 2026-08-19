@@ -10,6 +10,14 @@ const ML = 46
 const MT = 14
 
 interface Pt { d: string; c: number }
+export interface LevelHistoryPoint {
+  d: string
+  sellLo: number | null
+  stop: number | null
+  addLo: number | null
+  addHi: number | null
+  origin: string
+}
 interface Band { d: string; mid: number; up: number; lo: number }
 
 function niceTicks(min: number, max: number, count = 5): number[] {
@@ -25,12 +33,14 @@ function niceTicks(min: number, max: number, count = 5): number[] {
 
 /** 圖一：收盤價＋布林通道＋三條水平價位線 */
 export function PriceChart({
-  bars, bands, levels, currency,
+  bars, bands, levels, currency, history,
 }: {
   bars: Pt[]
   bands: Band[]
   levels: { sell?: [number, number] | null; stop?: number | null; add?: [number, number] | null }
   currency: string
+  /** 當時每天說的價位。給了就疊上去，回顧才看得出建議準不準。 */
+  history?: LevelHistoryPoint[]
 }) {
   const H = 380
   const PH = H - MT - 26
@@ -82,6 +92,35 @@ export function PriceChart({
 
   const labelEvery = Math.ceil(bars.length / 6)
 
+  // 歷史價位：階梯線（價位一天一個值，不該畫成平滑折線——它是離散的判斷）
+  const idxByDate = new Map(bars.map((b, i) => [b.d, i]))
+  const histSeries: { key: string; varName: string; pick: (h: LevelHistoryPoint) => number | null }[] = [
+    { key: 'hist-sell', varName: 'sell', pick: (h) => h.sellLo },
+    { key: 'hist-stop', varName: 'stop', pick: (h) => h.stop },
+    { key: 'hist-add', varName: 'buy', pick: (h) => h.addHi },
+  ]
+  const histPaths = (history ?? []).length > 1
+    ? histSeries.map(({ key, varName, pick }) => {
+        let d = ''
+        let prevY: number | null = null
+        for (const h of history!) {
+          const i = idxByDate.get(h.d)
+          const v = pick(h)
+          if (i === undefined || v === null) continue
+          const px = x(i)
+          const py = y(v)
+          if (d === '') d = `M${px.toFixed(1)},${py.toFixed(1)}`
+          else if (prevY !== null && Math.abs(py - prevY) > 0.01) {
+            d += `L${px.toFixed(1)},${prevY.toFixed(1)}L${px.toFixed(1)},${py.toFixed(1)}`
+          } else {
+            d += `L${px.toFixed(1)},${py.toFixed(1)}`
+          }
+          prevY = py
+        }
+        return { key, varName, d }
+      }).filter((p) => p.d !== '')
+    : []
+
   return (
     <>
       <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="收盤價與布林通道">
@@ -90,6 +129,13 @@ export function PriceChart({
             <line className="grid" x1={ML} y1={y(v)} x2={W - 14} y2={y(v)} />
             <text className="tick" x={ML - 6} y={y(v) + 4} textAnchor="end">{v.toFixed(digits)}</text>
           </g>
+        ))}
+        {/* 當時說的價位，畫成階梯線疊在走勢上。
+            這是回顧的重點：止跌線被跌破之後價格真的續跌了嗎？
+            賣出線碰到之後真的回落嗎？看圖比看統計數字直接。 */}
+        {histPaths.map((h) => (
+          <path key={h.key} d={h.d} fill="none"
+            style={{ stroke: `var(--${h.varName})`, strokeWidth: 1.5, opacity: .75 }} />
         ))}
         {zones.map((z) => (
           <rect key={z.varName} x={ML} y={Math.min(y(z.hi), y(z.lo))}
@@ -116,8 +162,12 @@ export function PriceChart({
               lastY = labelY
               return (
                 <g key={h.label}>
-                  <line className="refline" x1={ML} y1={lineY} x2={W - 14} y2={lineY}
-                    style={{ stroke: `var(--${varName})` }} />
+                  {/* 有歷史軌跡時不再畫整條橫線：那條線的右端就是軌跡的右端，
+                      兩條疊在一起只會互相干擾。沒有歷史時才需要它當參考。 */}
+                  {histPaths.length === 0 && (
+                    <line className="refline" x1={ML} y1={lineY} x2={W - 14} y2={lineY}
+                      style={{ stroke: `var(--${varName})` }} />
+                  )}
                   {/* 價位標籤放左側。右邊留給「今天的價格」那個端點標籤，
                       兩邊都擠在右緣會疊在一起。 */}
                   <text className="tick" x={ML + 6} y={labelY} textAnchor="start"
@@ -144,11 +194,16 @@ export function PriceChart({
       </svg>
       <div className="legend">
         <span><i className="sw" style={{ borderColor: 'var(--blue)' }} />收盤價（末點＝今日）</span>
-        <span><i className="sw" style={{ borderColor: 'var(--orange)' }} />布林中軌</span>
+        <span><i className="sw" style={{ borderColor: 'var(--mid)' }} />布林中軌</span>
         <span><i className="sw" style={{ borderColor: 'var(--bandline)' }} />上下軌</span>
         <span><i className="sw dash" style={{ borderColor: 'var(--sell)' }} />賣出</span>
         <span><i className="sw dash" style={{ borderColor: 'var(--stop)' }} />止跌</span>
         <span><i className="sw dash" style={{ borderColor: 'var(--buy)' }} />加碼</span>
+        {histPaths.length > 0 && (
+          <span style={{ color: 'var(--muted)' }}>
+            階梯線＝<b>當時每天說的價位</b>（回頭看準不準）
+          </span>
+        )}
       </div>
     </>
   )
@@ -183,14 +238,14 @@ export function KdChart({ points }: { points: { d: string; k: number; d_val: num
         <circle cx={x(points.length - 1)} cy={y(points[points.length - 1]!.k)} r={3.5}
           style={{ fill: 'var(--blue)' }} />
         <circle cx={x(points.length - 1)} cy={y(points[points.length - 1]!.d_val)} r={3.5}
-          style={{ fill: 'var(--orange)' }} />
+          style={{ fill: 'var(--mid)' }} />
         {points.map((p, i) => (i % labelEvery === 0 ? (
           <text key={p.d} className="tick" x={x(i)} y={H - 6} textAnchor="middle">{p.d.slice(5)}</text>
         ) : null))}
       </svg>
       <div className="legend">
         <span><i className="sw" style={{ borderColor: 'var(--blue)' }} />K</span>
-        <span><i className="sw" style={{ borderColor: 'var(--orange)' }} />D</span>
+        <span><i className="sw" style={{ borderColor: 'var(--mid)' }} />D</span>
         <span><i className="sw dash" style={{ borderColor: 'var(--muted)' }} />20 / 80 參考線</span>
       </div>
     </>
