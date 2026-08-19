@@ -3,6 +3,7 @@ import { getStockPage } from '@/lib/data'
 import { PriceChart, KdChart } from '@/components/Charts'
 import { NavLink } from '@/components/NavLink'
 import { LevelStrip, type StripLevel } from '@/components/LevelStrip'
+import { levelStatus } from '@/lib/status'
 import { kd as computeKd } from '@/lib/indicators'
 
 export const dynamic = 'force-dynamic'
@@ -75,6 +76,13 @@ export default async function StockPage({
   if (levels.stop) strip.push({ kind: 'stop', lo: levels.stop.price })
   if (levels.add) strip.push({ kind: 'add', lo: levels.add.lo, hi: levels.add.hi })
 
+  // 與清單共用同一份判斷，兩邊才不會對同一檔講出不一樣的話
+  const status = levelStatus(close, {
+    sell: levels.sell ? { lo: levels.sell.lo, hi: levels.sell.hi } : null,
+    stop: levels.stop?.price ?? null,
+    add: levels.add ?? null,
+  })
+
   // KD 曲線：從已存的 bars 重算（daily_analysis 只存最後一天那一組）。
   // RSV 必須吃**盤中高低價**，用收盤價當高低會算出很接近但永遠對不上的數字。
   const kdPoints = page.bars.length >= 9
@@ -99,6 +107,14 @@ export default async function StockPage({
           <span className="badge">僅供參考，非投資建議</span>
         </p>
       </header>
+
+      {status.kind !== 'none' && (
+        <p className={`pagestatus tone-${status.tone}`} data-testid="page-status">
+          {status.label}
+          {status.distancePct !== null
+            && `　距離 ${status.distancePct > 0 ? '+' : ''}${status.distancePct.toFixed(1)}%`}
+        </p>
+      )}
 
       <LevelStrip levels={strip} close={close} />
 

@@ -4,9 +4,10 @@
  */
 import { createAdminClient } from '../src/lib/supabase/admin'
 
+// 本機開發帳號。第二個只是用來驗 RLS（兩個帳號才看得出互相看不到）。
 const USERS = [
-  { email: 'me@tideline.test', password: 'tideline-dev-1' },
-  { email: 'other@tideline.test', password: 'tideline-dev-2' },
+  { email: 'dev@dev.dev', password: 'dev' },
+  { email: 'dev2@dev.dev', password: 'dev' },
 ]
 
 /** 第一個帳號的預設清單：台股兩檔、美股兩檔 */

@@ -265,3 +265,108 @@ a { color: inherit; }
 .inlinelvl { display: flex; flex-wrap: wrap; gap: 4px 18px; }
 .inlinecell { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .inlinelab { font-size: .72rem; color: var(--muted); }
+
+/* ---------------------------------------------------------- 市場篩選 tag */
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+}
+.filtertag {
+  appearance: none;
+  font: inherit;
+  font-size: .85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+}
+.filtertag:hover:not(:disabled) { border-color: var(--ink2); }
+.filtertag:disabled { opacity: .45; cursor: default; }
+.filtertag.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  font-weight: 700;
+}
+.filtertag:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.filtercount {
+  font-size: .75rem;
+  opacity: .7;
+  font-weight: 600;
+}
+.filtertag.on .filtercount { opacity: .85; }
+
+/* 清單列的小字層級 */
+.rname { font-size: .8rem; color: var(--ink2); margin-top: 2px; }
+.rclose { font-size: 1.3rem; font-weight: 700; }
+.rkd { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+.rmeta { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+.pagehead { margin-bottom: 4px; }
+
+/* 整列可點（stretched link）：連結本身只包代號，再用 ::after 把可點範圍
+   撐滿整列。比「在子元素上關掉 pointer-events」好——那樣做連文字都收不到
+   事件，等於整列的內容都不能互動。 */
+.row { position: relative; }
+.rowlink::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+.rowlink:focus-visible::after {
+  outline: 2px solid var(--blue);
+  outline-offset: -3px;
+  border-radius: 8px;
+}
+/* 移除鈕要浮在可點範圍之上，否則會變成「點移除卻進了個股頁」 */
+.row .rowaction { position: relative; z-index: 2; }
+.row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.rcode { font-weight: 700; font-size: 1.05rem; }
+
+/* 破壞性動作低調處理 */
+.btnquiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  font-size: .82rem;
+  padding: 6px 10px;
+}
+.btnquiet:hover:not(:disabled) { color: var(--sell); border-color: var(--line); }
+
+/* 價位三欄固定寬，各列才對得齊 */
+.inlinelvl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 14px;
+}
+.inlinecell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+@media (max-width: 720px) {
+  .inlinelvl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 狀態徽章：只在真的接近或已到價位時出現。到處都有就等於沒有訊號。 */
+.statusbadge {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.tone-sell { color: var(--sell); background: color-mix(in srgb, var(--sell) 9%, transparent); }
+.tone-stop { color: var(--stop); background: color-mix(in srgb, var(--stop) 9%, transparent); }
+.tone-buy  { color: var(--buy);  background: color-mix(in srgb, var(--buy) 10%, transparent); }
+
+.pagestatus {
+  display: inline-block;
+  margin: 14px 0 0;
+  font-size: .85rem;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 99px;
+  border: 1px solid currentColor;
+}

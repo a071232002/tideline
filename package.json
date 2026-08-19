@@ -13,7 +13,9 @@
     "start": "next start",
     "e2e": "playwright test",
     "seed": "tsx scripts/seed.ts",
-    "ingest": "tsx scripts/ingest.ts"
+    "ingest": "tsx scripts/ingest.ts",
+    "e2e:compose": "podman compose --env-file .env.e2e -f docker-compose.e2e.yml down --remove-orphans && podman compose --env-file .env.e2e -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e",
+    "e2e:compose:down": "podman compose --env-file .env.e2e -f docker-compose.e2e.yml down --remove-orphans"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

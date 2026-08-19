@@ -10,7 +10,7 @@ function Pending() {
 /** 導覽的唯一回饋原語：點下去到頁面換掉之間要有反應（PLAN §3）。 */
 export function NavLink({
   href, children, ...rest
-}: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+}: { href: string; children?: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   return (
     <Link href={href} {...rest}>
       {children}

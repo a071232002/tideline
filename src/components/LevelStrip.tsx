@@ -60,16 +60,21 @@ export function LevelStrip({ levels, close }: { levels: StripLevel[]; close: num
 /** 觀察清單用的緊湊版：一列裡把三個價位排開，不要塞一整句散文 */
 export function LevelInline({ levels }: { levels: StripLevel[] }) {
   if (levels.length === 0) return <span className="empty">尚無分析資料</span>
+  // 固定三欄。用 flex-wrap 的話高價股（2330 約 2350）數字太長會換行，
+  // 各列的價位就對不齊，掃過去很難比較。
+  const byKind = (k: StripLevel['kind']) => levels.find((l) => l.kind === k)
+
   return (
     <span className="inlinelvl">
-      {levels.map((l) => {
-        const m = META[l.kind]
-        const range = l.hi !== undefined && l.hi !== l.lo
+      {(['sell', 'stop', 'add'] as const).map((k) => {
+        const l = byKind(k)
+        const m = META[k]
+        const range = l && l.hi !== undefined && l.hi !== l.lo
         return (
-          <span key={l.kind} className="inlinecell">
+          <span key={k} className="inlinecell">
             <span className="inlinelab">{m.label}</span>
             <span className={`tnum ${m.cls}`} style={{ fontWeight: 700 }}>
-              {money(l.lo)}{range && `～${money(l.hi!)}`}
+              {l ? `${money(l.lo)}${range ? `～${money(l.hi!)}` : ''}` : '—'}
             </span>
           </span>
         )
