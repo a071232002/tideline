@@ -2,7 +2,7 @@ import { unstable_cache, revalidateTag } from 'next/cache'
 import { createClient } from './supabase/server'
 import { createAdminClient } from './supabase/admin'
 import { CHART_BARS } from './pipeline'
-import { dataFreshness, taipeiToday, type Freshness } from './freshness'
+import { marketFreshness, taipeiToday, type MarketFreshness } from './freshness'
 
 /**
  * 讀取層。資料一天只變一次，非常適合快取——但也因此**快取沒清就是整天看到舊資料**。
@@ -35,19 +35,31 @@ export interface WatchRow {
  * 全站的資料新鮮度。每列各自寫「資料日期」不夠——排程整個沒跑時四列會一起
  * 顯示舊日期，使用者只會以為今天休市（PLAN §7）。
  */
-export async function getFreshness(): Promise<Freshness> {
+export async function getFreshness(): Promise<MarketFreshness[]> {
   const db = createAdminClient()
   const { data: jobs } = await db.from('job_runs')
-    .select('finished_at, ok').eq('ok', true)
+    .select('finished_at').eq('ok', true)
     .order('finished_at', { ascending: false }).limit(1)
-  const { data: bars } = await db.from('daily_bars')
-    .select('d').order('d', { ascending: false }).limit(1)
+  const lastOkAt = (jobs?.[0]?.finished_at as string) ?? null
+  const today = taipeiToday()
 
-  return dataFreshness({
-    lastOkAt: (jobs?.[0]?.finished_at as string) ?? null,
-    latestBarDate: (bars?.[0]?.d as string) ?? null,
-    today: taipeiToday(),
-  })
+  // 每個市場各自問「你最新的那根 K 棒是哪天」——共用一個日期會讓人
+  // 以為兩邊看的是同一場交易
+  const out: MarketFreshness[] = []
+  for (const market of ['TW', 'US'] as const) {
+    const { data: syms } = await db.from('symbols').select('id').eq('market', market)
+    const ids = (syms ?? []).map((x) => x.id as string)
+    if (ids.length === 0) continue
+
+    const { data: bars } = await db.from('daily_bars')
+      .select('d').in('symbol_id', ids)
+      .order('d', { ascending: false }).limit(1)
+
+    out.push(marketFreshness(market, {
+      lastOkAt, latestBarDate: (bars?.[0]?.d as string) ?? null, today,
+    }))
+  }
+  return out
 }
 
 /** 觀察清單總覽：一列一檔含當日狀態。走使用者身分，RLS 保證看不到別人的。 */

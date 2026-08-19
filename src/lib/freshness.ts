@@ -29,7 +29,7 @@ export function taipeiToday(now = new Date()): string {
   return taipei.toISOString().slice(0, 10)
 }
 
-function shortTime(iso: string): string {
+export function shortTime(iso: string): string {
   // 只留「MM-DD HH:mm」，年份對每天要看的人沒有資訊量
   const d = new Date(iso)
   const t = new Date(d.getTime() + 8 * 60 * 60 * 1000).toISOString()
@@ -58,4 +58,62 @@ export function dataFreshness({ lastOkAt, latestBarDate, today }: FreshnessInput
   }
 
   return { kind: 'fresh', message: `最後更新 ${shortTime(lastOkAt!)}`, tone: 'none' }
+}
+
+// ---------------------------------------------------------------- 分市場
+
+export type Market = 'TW' | 'US'
+
+export interface MarketFreshness extends Freshness {
+  market: Market
+  label: string
+  /** 這個市場最新一根 K 棒的日期 */
+  barDate: string | null
+}
+
+/**
+ * 台北的今天，對應到各市場「應該要有」的那根 K 棒日期。
+ *
+ * 台股就是今天（13:30 收盤）。美股是**前一天**——16:00 ET 收盤等於台北隔日
+ * 04:00（夏令）或 05:00（冬令），所以台北早上看到的是昨夜那一場。
+ *
+ * 兩個市場共用一個日期會讓人以為看的是同一場交易，那是錯的。
+ */
+export function expectedBarDate(market: Market, todayTaipei: string): string {
+  if (market === 'TW') return todayTaipei
+  const d = new Date(`${todayTaipei}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+const LABEL: Record<Market, string> = { TW: '台股', US: '美股' }
+
+export function marketFreshness(market: Market, input: FreshnessInput): MarketFreshness {
+  const { lastOkAt, latestBarDate, today } = input
+  const label = LABEL[market]
+  const ranToday = lastOkAt !== null && taipeiToday(new Date(lastOkAt)) === today
+
+  if (!ranToday) {
+    return {
+      market, label, barDate: latestBarDate, kind: 'stale', tone: 'warn',
+      message: lastOkAt
+        ? `${label}資料未更新（最後成功 ${shortTime(lastOkAt)}）`
+        : `${label}資料未更新`,
+    }
+  }
+
+  const expected = expectedBarDate(market, today)
+  if (latestBarDate === expected) {
+    return {
+      market, label, barDate: latestBarDate, kind: 'fresh', tone: 'none',
+      message: `${label} ${latestBarDate} 收盤`,
+    }
+  }
+
+  return {
+    market, label, barDate: latestBarDate, kind: 'holiday', tone: 'muted',
+    message: latestBarDate
+      ? `${label}休市，為 ${latestBarDate} 收盤`
+      : `${label}尚無資料`,
+  }
 }

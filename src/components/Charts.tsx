@@ -84,7 +84,7 @@ export function PriceChart({
 
   return (
     <>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="收盤價與布林通道">
+      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="收盤價與布林通道">
         {niceTicks(ymin, ymax).map((v) => (
           <g key={v}>
             <line className="grid" x1={ML} y1={y(v)} x2={W - 14} y2={y(v)} />
@@ -170,7 +170,7 @@ export function KdChart({ points }: { points: { d: string; k: number; d_val: num
 
   return (
     <>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="KD 指標">
+      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="KD 指標">
         {[0, 20, 50, 80, 100].map((v) => (
           <g key={v}>
             <line className={v === 20 || v === 80 ? 'refline' : 'grid'}

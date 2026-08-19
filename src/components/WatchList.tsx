@@ -4,6 +4,7 @@ import { NavLink } from './NavLink'
 import { SubmitButton } from './SubmitButton'
 import { LevelInline } from './LevelStrip'
 import { MarketFilter, type Filter } from './MarketFilter'
+import { Icon } from './Icon'
 import { levelStatus } from '@/lib/status'
 import { sortRows, type SortMode } from '@/lib/sorting'
 import type { WatchRow } from '@/lib/data'
@@ -62,6 +63,15 @@ export function WatchList({
           ))}
         </div>
       </div>
+
+      {shown.length > 0 && (
+        <div className="listhead" aria-hidden="true">
+          <span>標的</span>
+          <span>收盤</span>
+          <span className="lvlhead"><span>波段賣出</span><span>止跌</span><span>加碼</span></span>
+          <span />
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <div className="card">
@@ -129,7 +139,11 @@ export function WatchList({
                   if (!confirm(`從觀察清單移除 ${r.code}？`)) e.preventDefault()
                 }}>
                 <input type="hidden" name="symbol_id" value={r.symbol_id} />
-                <SubmitButton className="btnquiet" pendingText="移除中…">移除</SubmitButton>
+                <SubmitButton className="iconbtn danger"
+                  aria-label={`從觀察清單移除 ${r.code}`}
+                  title={`從觀察清單移除 ${r.code}`} pendingText="…">
+                  <Icon name="minusCircle" />
+                </SubmitButton>
               </form>
             </div>
             )

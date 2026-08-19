@@ -4,6 +4,8 @@ import { PriceChart, KdChart } from '@/components/Charts'
 import { NavLink } from '@/components/NavLink'
 import { LevelStrip, type StripLevel } from '@/components/LevelStrip'
 import { levelStatus } from '@/lib/status'
+import { Icon } from '@/components/Icon'
+import { TopBar } from '@/components/TopBar'
 import { kd as computeKd } from '@/lib/indicators'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +41,8 @@ export default async function StockPage({
   if (!a) {
     return (
       <main className="wrap">
-        <NavLink href="/">← 觀察清單</NavLink>
+        <TopBar />
+      <NavLink href="/" className="backlink"><Icon name="back" /><span>觀察清單</span></NavLink>
         <h1>{page.symbol.code} {page.symbol.name ?? ''}</h1>
         <div className="card">
           <p className="empty" data-testid="no-analysis">
@@ -95,7 +98,8 @@ export default async function StockPage({
 
   return (
     <main className="wrap">
-      <NavLink href="/">← 觀察清單</NavLink>
+      <TopBar />
+      <NavLink href="/" className="backlink"><Icon name="back" /><span>觀察清單</span></NavLink>
 
       <header style={{ marginTop: 10 }}>
         <h1>

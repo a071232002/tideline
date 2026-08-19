@@ -26,8 +26,15 @@
   --shadow: 0 1px 2px rgba(60, 52, 34, .07), 0 4px 12px rgba(60, 52, 34, .05);
 }
 
+/*
+ * 深色的三段式寫法：
+ *   1. 系統偏好深色，且使用者沒有手動選淺色  → 深色
+ *   2. 使用者手動選深色                      → 深色（不管系統）
+ * 手動選項寫在 [data-theme]，由 ThemeToggle 寫到 <html>。
+ * 順序不能顛倒：data-theme 那段要在 media query 之後，才蓋得過去。
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #16150f;
     --card: #21201a;
     --ink: #ebe8df;
@@ -44,6 +51,25 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 4px 14px rgba(0, 0, 0, .35);
   }
 }
+
+/* 手動選深色：蓋過系統偏好 */
+:root[data-theme="dark"] {
+  --bg: #16150f;
+  --card: #21201a;
+  --ink: #ebe8df;
+  --ink2: #b2ada0;
+  --muted: #8b8778;
+  --line: #37352c;
+  --blue: #5b9df0;
+  --orange: #e57a45;
+  --sell: #ef7676;
+  --stop: #e08a4a;
+  --buy: #4fbb7a;
+  --bandfill: rgba(91, 157, 240, .13);
+  --bandline: #4c493d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 4px 14px rgba(0, 0, 0, .35);
+}
+
 
 * { box-sizing: border-box; }
 
@@ -119,8 +145,10 @@ h1 { font-size: 1.35rem; margin: 0 0 4px; }
 h2 { font-size: 1rem; margin: 0 0 10px; }
 .sub { color: var(--ink2); font-size: .85rem; }
 
-/* SVG 一律隨容器縮放，絕不橫向捲動 */
-svg { width: 100%; height: auto; display: block; }
+/* 圖表 SVG 隨容器縮放，絕不橫向捲動。
+   **只能挑 .chartsvg**——寫成 `svg {}` 會連介面圖示一起撐成 100% 寬，
+   按鈕就會被一個巨大的加號撐爆。 */
+.chartsvg { width: 100%; height: auto; display: block; }
 .grid { stroke: var(--line); stroke-width: 1; }
 .refline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
 .tick { fill: var(--muted); font-size: 11px; }
@@ -419,7 +447,106 @@ a { color: inherit; }
 }
 .addtoggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
+/* 手機才出現的收合鈕。這兩條要排在所有 .addtoggle 規則之後。 */
+.addtoggle { display: none; }
 @media (max-width: 720px) {
-  .addtoggle { display: inline-block; }
+  .addtoggle { display: inline-flex; }
   .addform.collapsed { display: none; }
 }
+
+/* ------------------------------------------------------------- 頂部列 */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.brand {
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: .02em;
+  text-decoration: none;
+}
+.topbarright { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* 配色切換：三段，「系統」也是一個真的選項 */
+.themetoggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.themebtn {
+  appearance: none; font: inherit; font-size: .78rem; cursor: pointer;
+  border: 0; background: transparent; color: var(--ink2); padding: 5px 11px;
+}
+.themebtn + .themebtn { border-left: 1px solid var(--line); }
+.themebtn.on { background: var(--card); color: var(--ink); font-weight: 700; }
+.themebtn:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+/* 清單表頭：價位標籤放這裡，列裡就不必每列重複三次 */
+.listhead {
+  display: grid;
+  grid-template-columns: 150px 150px 1fr auto;
+  gap: 14px;
+  padding: 0 18px 6px;
+  font-size: .72rem;
+  color: var(--muted);
+}
+.listhead .lvlhead {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 720px) { .listhead { display: none; } }
+/* 桌機由表頭負責標籤，列裡的重複標籤收起來 */
+@media (min-width: 721px) { .row .inlinelab { display: none; } }
+
+/* 列高一致：有徽章與沒徽章的列不要差一截，看起來像鋸齒 */
+.row { min-height: 92px; align-items: center; }
+
+/* ------------------------------------------------------------- 圖示按鈕 */
+.icon { display: block; flex: 0 0 auto; width: 18px; height: 18px; }
+.themebtn .icon { width: 16px; height: 16px; }
+
+/* 只有圖示：一定要有 aria-label，滑過要有 title */
+.iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0;
+  border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.iconbtn:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.iconbtn.danger:hover:not(:disabled) {
+  color: var(--sell);
+  background: color-mix(in srgb, var(--sell) 12%, transparent);
+}
+.iconbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.iconbtn:disabled { opacity: .5; cursor: progress; }
+
+/* 圖示＋文字。
+   注意 .addtoggle 不放進這條——它在桌機是 display:none，寫在這裡會把它打開，
+   而且 inline-flex 沒有 nowrap 時中文會一個字一行，按鈕就變成一塊方磚。 */
+.btn.withicon, .addtoggle, .backlink {
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn.withicon { display: inline-flex; }
+.backlink {
+  display: inline-flex;
+  font-size: .85rem; color: var(--ink2); text-decoration: none;
+  margin-bottom: 8px;
+}
+.backlink:hover { color: var(--ink); }
+
+/* 所有按鈕都不換行——中文按鈕一旦換行就會變成直式的方塊 */
+.btn, .segbtn, .filtertag, .sorttag, .themebtn, .addtoggle {
+  white-space: nowrap;
+}
+
+.freshgroup { display: inline-flex; gap: 10px; flex-wrap: wrap; align-items: center; }

@@ -2,6 +2,7 @@
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { addSymbol } from '@/app/actions'
 import { SubmitButton } from './SubmitButton'
+import { Icon } from './Icon'
 
 /**
  * 市場一定要讓使用者選，不能從代號猜——台股有 00679B 這種帶字母的代號，
@@ -40,7 +41,8 @@ export function AddSymbolForm() {
     <>
       <button type="button" className="addtoggle" data-testid="add-toggle"
         aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {open ? '收起' : '＋ 加入標的'}
+        <Icon name={open ? 'chevronUp' : 'plus'} />
+        <span>{open ? '收起' : '加入標的'}</span>
       </button>
 
       <form action={action} className={`card addform${open ? '' : ' collapsed'}`}
@@ -72,7 +74,10 @@ export function AddSymbolForm() {
           autoComplete="off"
           required
         />
-        <SubmitButton data-testid="add-submit" pendingText="驗證並抓取中…">加入</SubmitButton>
+        <SubmitButton data-testid="add-submit" className="withicon"
+          pendingText="驗證並抓取中…">
+          <Icon name="plus" /><span>加入</span>
+        </SubmitButton>
 
         {state?.error && (
           <p className="err" role="alert" data-testid="add-error">{state.error}</p>
