@@ -101,9 +101,8 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
   if (!ranToday) {
     return {
       market, label, barDate: latestBarDate, fetchedAt, kind: 'stale', tone: 'warn',
-      message: lastOkAt
-        ? `${label}資料未更新（最後成功 ${shortTime(lastOkAt)}）`
-        : `${label}資料未更新`,
+      // 時間不寫在這裡——頁首另有一個抓取時間的欄位，寫三次是雜訊
+      message: `${label}未更新`,
     }
   }
 

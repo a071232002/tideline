@@ -76,9 +76,9 @@ export default async function StockPage({
 
   // 三個關鍵價位抽到最前面。判斷句留在下面當佐證，不再是唯一的入口。
   const strip: StripLevel[] = []
-  if (levels.sell) strip.push({ kind: 'sell', lo: levels.sell.lo, hi: levels.sell.hi })
-  if (levels.stop) strip.push({ kind: 'stop', lo: levels.stop.price })
-  if (levels.add) strip.push({ kind: 'add', lo: levels.add.lo, hi: levels.add.hi })
+  if (levels.sell) strip.push({ kind: 'sell', lo: levels.sell.lo, hi: levels.sell.hi, why: why.sell })
+  if (levels.stop) strip.push({ kind: 'stop', lo: levels.stop.price, why: why.stop })
+  if (levels.add) strip.push({ kind: 'add', lo: levels.add.lo, hi: levels.add.hi, why: why.add })
 
   // 與清單共用同一份判斷，兩邊才不會對同一檔講出不一樣的話
   const status = levelStatus(close, {
@@ -109,7 +109,6 @@ export default async function StockPage({
         <h1>{page.symbol.name ?? page.symbol.code}</h1>
         <p className="sub">
           資料日期 {String(a.d)}
-          <span className="badge">已收盤</span>
           <span className="badge">僅供參考，非投資建議</span>
         </p>
       </header>
@@ -139,11 +138,7 @@ export default async function StockPage({
         <div className="tile">
           <div className="lab">KD（9,3,3）</div>
           <div className="val tnum" data-testid="kd">K {fmt(kv, 1)} / D {fmt(dv, 1)}</div>
-          <div className="det">
-            {kv !== null && dv !== null
-              ? kv < dv ? '短線走弱，K 在 D 之下' : 'K 在 D 之上'
-              : '—'}
-          </div>
+          <div className="det">{kv !== null && dv !== null && kv < dv ? 'K 在 D 之下' : ''}</div>
         </div>
 
         <div className="tile">
@@ -174,38 +169,6 @@ export default async function StockPage({
           結論由{verdict.source === 'rule' ? '規則' : 'AI'}產生。
           本報告為自動化技術分析，<b>僅供參考，非投資建議</b>；投資人應自行評估風險。
         </p>
-      </section>
-
-      <section className="card">
-        <h2>關鍵價位</h2>
-
-        {levels.sell && (
-          <div className="lvl" data-testid="level-sell">
-            <div className="name sellc">波段賣出點</div>
-            <div className="price sellc tnum">
-              {levels.sell.lo.toFixed(2)}～{levels.sell.hi.toFixed(2)}
-            </div>
-            <div className="why">{why.sell}</div>
-          </div>
-        )}
-
-        {levels.stop && (
-          <div className="lvl" data-testid="level-stop">
-            <div className="name stopc">止跌點</div>
-            <div className="price stopc tnum">{levels.stop.price.toFixed(2)}</div>
-            <div className="why">{why.stop}</div>
-          </div>
-        )}
-
-        {levels.add && (
-          <div className="lvl" data-testid="level-add">
-            <div className="name buyc">加碼點</div>
-            <div className="price buyc tnum">
-              {levels.add.lo.toFixed(2)}～{levels.add.hi.toFixed(2)}
-            </div>
-            <div className="why">{why.add}</div>
-          </div>
-        )}
       </section>
 
       <ValuationCard valuation={page.valuation} market={page.symbol.market}

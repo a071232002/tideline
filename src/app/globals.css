@@ -165,7 +165,9 @@ body {
   padding: 14px 16px; box-shadow: var(--shadow);
 }
 .tile .lab { color: var(--muted); }
-.tile .val { font-size: var(--n-md); font-weight: 800; margin-top: 4px; color: var(--ink); }
+/* 不要在這裡寫 color——`.tile .val` 的特異性會蓋過 .chg-up / .chg-down，
+   收盤價就變成一片黑，漲跌看不出來。顏色由那兩個類別決定。 */
+.tile .val { font-size: var(--n-md); font-weight: 800; margin-top: 4px; }
 .tile .det { font-size: var(--t-micro); color: var(--ink2); margin-top: 6px; line-height: 1.5; }
 
 /* 漲跌顏色。名字直接叫 up/down，不要再用 sell/buy——
@@ -336,7 +338,10 @@ a { color: inherit; }
   gap: 12px;
   margin: 18px 0;
 }
+.strip { align-items: stretch; }
 .stripcell {
+  display: flex;
+  flex-direction: column;
   background: var(--card);
   border: 1px solid var(--line);
   border-top: 3px solid var(--line);
@@ -669,3 +674,32 @@ a { color: inherit; }
   margin-top: 3px;
 }
 .valhint { font-size: var(--t-micro); color: var(--faint); margin-top: 2px; }
+
+/* 市場標記：小、無框、字距開。上面的篩選列已經在講市場了 */
+.mkt {
+  font-size: var(--t-micro);
+  letter-spacing: .1em;
+  color: var(--faint);
+  margin-left: 7px;
+  font-weight: 600;
+}
+/* 只在這一檔落後其他檔時才出現 */
+.lagging { color: var(--stop); font-weight: 600; }
+
+/* 頁尾細字 */
+.footnote {
+  font-size: var(--t-micro);
+  color: var(--faint);
+  margin: 22px 0 0;
+}
+
+/* 決策條吸收了原本「關鍵價位」卡的理由，卡片可以整張刪掉 */
+.stripwhy {
+  margin-top: auto;
+  font-size: var(--t-micro);
+  color: var(--ink2);
+  line-height: 1.6;
+  margin: 9px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}

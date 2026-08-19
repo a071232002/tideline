@@ -41,6 +41,16 @@ export function WatchList({
     US: rows.filter((r) => r.market === 'US').length,
   }), [rows])
 
+  // 每個市場最新的資料日期。列上只在落後時才標日期。
+  const latestByMarket = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const r of rows) {
+      if (!r.d) continue
+      if (!out[r.market] || r.d > out[r.market]!) out[r.market] = r.d
+    }
+    return out
+  }, [rows])
+
   const shown = useMemo(() => {
     const filtered = filter === 'ALL' ? rows : rows.filter((r) => r.market === filter)
     return sortRows(filtered, sort)
@@ -51,7 +61,6 @@ export function WatchList({
       <div className="listbar">
         <MarketFilter counts={counts} onChange={setFilter} />
         <div className="sortbar" role="group" aria-label="排序">
-          <span className="sortlab">排序</span>
           {SORTS.map((s) => (
             <button key={s.key} type="button"
               data-testid={`sort-${s.key}`}
@@ -97,9 +106,9 @@ export function WatchList({
                 <NavLink className="rowlink rcode" href={`/${r.market.toLowerCase()}/${r.code}`}>
                   {r.code}
                 </NavLink>
-                <span className="badge" style={{ marginLeft: 6 }}>
-                  {r.market === 'TW' ? '台股' : '美股'}
-                </span>
+                {/* 市場用極小的灰字，不用有框的徽章——上面的篩選列已經在講市場，
+                    每列再來一顆膠囊只是視覺噪音 */}
+                <span className="mkt">{r.market}</span>
                 <div className="rname">{r.name ?? ''}</div>
                 {st.kind !== 'none' && (
                   <span className={`statusbadge tone-${st.tone}`} data-testid={`status-${r.code}`}>
@@ -129,9 +138,14 @@ export function WatchList({
 
               <div className="rwhy">
                 <LevelInline levels={r.levels} />
+                {/* 資料日期只在**這一檔落後了**的時候才顯示。四列都印同一個日期
+                    是廢話，頁首已經說過；真正要提醒的是「這檔跟其他檔不同步」。 */}
                 <div className="rmeta">
                   {r.tone ?? ''}
-                  {r.d ? `　資料日期 ${r.d}` : '　資料未更新'}
+                  {r.d && r.d !== latestByMarket[r.market] && (
+                    <span className="lagging">　停在 {r.d}</span>
+                  )}
+                  {!r.d && <span className="lagging">　尚無資料</span>}
                 </div>
               </div>
 

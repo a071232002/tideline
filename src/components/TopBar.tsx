@@ -27,7 +27,7 @@ export function TopBar({ fresh }: { fresh?: MarketFreshness[] }) {
               後者說「這份資料多新」。只給日期看不出後者。 */}
           {fresh[0]?.fetchedAt && (
             <span className="fetchedat" data-testid="fetched-at">
-              {fresh[0].fetchedAt} 抓取
+              {fresh[0].fetchedAt}
             </span>
           )}
         </span>

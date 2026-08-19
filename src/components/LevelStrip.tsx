@@ -11,6 +11,9 @@ export interface StripLevel {
   kind: 'sell' | 'stop' | 'add'
   lo: number
   hi?: number
+  /** 這個價位是怎麼來的。原本另開一張「關鍵價位」卡放它，
+      但那張卡把同一組數字又印了一次——理由跟著數字走就好。 */
+  why?: string
 }
 
 const META = {
@@ -50,6 +53,7 @@ export function LevelStrip({ levels, close }: { levels: StripLevel[]; close: num
                 </span>
               )}
             </div>
+            {l.why && <p className="stripwhy">{l.why}</p>}
           </div>
         )
       })}

@@ -13,17 +13,20 @@ export default async function HomePage() {
     <main className="wrap">
       <TopBar fresh={fresh} />
 
+      {/* 標題就是標題。「每日技術分析」「收盤後更新」「指標由程式計算」
+          這三句在講同一件事，而且看的人已經知道自己來這裡幹嘛。 */}
       <header className="pagehead">
-        <span className="eyebrow">每日技術分析</span>
         <h1>觀察清單</h1>
-        <p className="sub">
-          收盤後更新，指標與價位由程式計算
-          <span className="badge">僅供參考，非投資建議</span>
-        </p>
       </header>
 
       <AddSymbolForm />
       <WatchList rows={rows} removeAction={removeSymbol} />
+
+      {/* 免責聲明留著（PLAN §9），但放頁尾當細字，不跟標題搶位置。
+          真正該顯眼的那份在個股頁的判斷卡裡。 */}
+      <p className="footnote">
+        指標與價位由程式計算，僅供參考，非投資建議。
+      </p>
     </main>
   )
 }

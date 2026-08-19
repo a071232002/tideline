@@ -87,12 +87,9 @@ function tone(close: number, ma60: number | null, k: number, d: number, pctB: nu
 export function buildVerdict(input: VerdictInput): Verdict {
   const { close, ma60, k, d, kPrev, dPrev, pctB, pctBPrev, levels, currency } = input
 
-  const parts: string[] = []
-  if (levels.sell) parts.push(`反彈 ${zone(levels.sell.lo, levels.sell.hi, currency)} 減碼`)
-  if (levels.stop) parts.push(`止跌 ${fmt(levels.stop.price, currency)}`)
-  parts.push(`回檔 ${zone(levels.add.lo, levels.add.hi, currency)} 分批加碼`)
-
-  const headline = `${tone(close, ma60, k, d, pctB)}。${parts.join('、')}。`
+  // headline 只講定調。三個價位就在正上方的決策條裡，再唸一次是廢話——
+  // 而且那樣寫出來的句子每天都長一樣，反而讓人不想讀。
+  const headline = tone(close, ma60, k, d, pctB)
 
   const reasons: string[] = []
   const t = trendPhrase(close, ma60)
