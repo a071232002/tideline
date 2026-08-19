@@ -211,4 +211,26 @@ describe('賣出區永遠要在現價之上', () => {
     expect(z!.kind).toBe('band')
     expect(z!.lo).toBeGreaterThan(rising[rising.length - 1]!.c)
   })
+
+  it('賣出區永遠有寬度，不會塌成一個點', () => {
+    // PLTR 實測抓到的：band 模式下上下界都取上軌，印出 196.00 ~ 196.00
+    const rising: Bar[] = Array.from({ length: 80 }, (_, i) => {
+      const base = 100 + i * 1.5
+      return { date: `2026-02-${String(i + 1).padStart(2, '0')}`, o: base, h: base + 1, l: base - 1, c: base, v: 1000 }
+    })
+    const bb = bollinger(rising.map((x) => x.c), 20, 2)!
+    const z = sellZone(rising, bb, 3, 'US')!
+    expect(z.hi).toBeGreaterThan(z.lo)
+  })
+
+  it('0050 逐日檢查賣出區都有寬度', () => {
+    for (let i = 70; i < bars.length; i++) {
+      const b = bars.slice(0, i + 1)
+      const bb = bollinger(b.map((x) => x.c), 20, 2)
+      if (!bb) continue
+      const z = sellZone(b, bb, 3, 'TW')
+      if (!z) continue
+      expect(z.hi, `${bars[i]!.date}`).toBeGreaterThan(z.lo)
+    }
+  })
 })

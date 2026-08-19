@@ -19,10 +19,11 @@ interface Target {
   currency: string
 }
 
-/** 預設觀察清單。美股預設追蹤輝達。 */
+/** 預設觀察清單。美股預設追蹤 Palantir 與輝達。 */
 const DEFAULT_TARGETS: Target[] = [
   { market: 'TW', code: '0050', label: '0050 元大台灣50', currency: 'TWD' },
   { market: 'TW', code: '2330', label: '2330 台積電', currency: 'TWD' },
+  { market: 'US', code: 'PLTR', label: 'PLTR Palantir', currency: 'USD' },
   { market: 'US', code: 'NVDA', label: 'NVDA 輝達', currency: 'USD' },
 ]
 

@@ -151,9 +151,13 @@ export function sellZone(bars: readonly Bar[], bb: BollingerBands, k = 3, market
   const anchor = nearest ? nearest.price : bb.upper
   if (anchor <= close) return null // 連上軌都在現價之下：極端超買，不給賣出區
 
+  // 區間上緣：有前波高時往上到上軌為止；沒有前波高（用上軌當錨）時，
+  // 上軌本身是一條線不是一個區間，要自己給寬度，否則會塌成 196.00~196.00。
+  const rawHi = nearest ? Math.min(anchor * 1.01, bb.upper) : anchor * 1.01
+
   const tick = tickFor(anchor, market)
   const lo = roundToTick(anchor, tick)
-  const hi = roundToTick(Math.max(Math.min(anchor * 1.01, bb.upper), anchor), tick)
+  const hi = roundToTick(Math.max(rawHi, anchor + tick), tick)
   return {
     lo,
     hi: Math.max(hi, lo),
