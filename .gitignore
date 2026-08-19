@@ -1,0 +1,38 @@
+# --- secrets ---
+.env
+.env.*
+!.env.example
+
+# --- dependencies / build ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
+# --- 本機文件與設計參考（不上傳） ---
+/docs/
+
+# --- 本機開發與測試工具（遠端部署用不到） ---
+/e2e/
+playwright.config.ts
+Dockerfile
+.dockerignore
+docker-compose.e2e.yml
+supabase/config.toml
+supabase/seed.sql
+supabase/.branches/
+supabase/.temp/
+
+# --- 測試與執行產物 ---
+playwright-report/
+test-results/
+blob-report/
+*.log
+__pycache__/
+
+# --- misc ---
+.DS_Store
+Thumbs.db
+/.claude/
