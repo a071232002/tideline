@@ -18,7 +18,7 @@ export interface FreshnessInput {
 }
 
 export interface Freshness {
-  kind: 'fresh' | 'holiday' | 'stale'
+  kind: 'fresh' | 'pending' | 'holiday' | 'stale'
   message: string
   tone: 'none' | 'muted' | 'warn'
 }
@@ -91,6 +91,26 @@ export function expectedBarDate(market: Market, todayTaipei: string): string {
 
 const LABEL: Record<Market, string> = { TW: '台股', US: '美股' }
 
+/**
+ * 各市場的收盤時間，換算成台北時間的「當日第幾分鐘」。
+ *
+ * 台股 13:30 收在當天。美股那一場收在台北的凌晨——16:00 ET 是台北 04:00（夏令）
+ * 或 05:00（冬令），取 06:00 當保守基準，資料也定案了。
+ *
+ * 用途是分辨「休市」與「尚未收盤」：抓取時間若在收盤之前，
+ * 拿不到當天的 K 棒是理所當然的，那不是休市也不是故障。
+ */
+const CLOSE_MINUTE: Record<Market, number> = {
+  TW: 13 * 60 + 30,
+  US: 6 * 60,
+}
+
+/** ISO 時間在台北是當日第幾分鐘 */
+function taipeiMinuteOfDay(iso: string): number {
+  const t = new Date(new Date(iso).getTime() + 8 * 60 * 60 * 1000)
+  return t.getUTCHours() * 60 + t.getUTCMinutes()
+}
+
 export function marketFreshness(market: Market, input: FreshnessInput): MarketFreshness {
   const { lastOkAt, latestBarDate, today } = input
   const label = LABEL[market]
@@ -111,6 +131,17 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
     return {
       market, label, barDate: latestBarDate, fetchedAt, kind: 'fresh', tone: 'none',
       message: `${label} ${latestBarDate} 收盤`,
+    }
+  }
+
+  // 抓的時候還沒收盤——那當然拿不到當天的 K 棒。這不是休市也不是故障，
+  // 是排程排在收盤之前。混進「休市」的話，交易日會被說成假日。
+  if (lastOkAt !== null && taipeiMinuteOfDay(lastOkAt) < CLOSE_MINUTE[market]) {
+    return {
+      market, label, barDate: latestBarDate, fetchedAt, kind: 'pending', tone: 'muted',
+      message: latestBarDate
+        ? `${label}尚未收盤，為 ${latestBarDate} 收盤`
+        : `${label}尚未收盤`,
     }
   }
 

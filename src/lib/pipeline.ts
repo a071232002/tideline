@@ -3,6 +3,7 @@ import { fetchTwseDailyBars } from './sources/twse'
 import { fetchYahooDailyBars } from './sources/yahoo'
 import { analyze } from './analyze'
 import { RULES_VERSION } from './backfill'
+import { checkBars, checkAnalysis, type Issue } from './sanity'
 import { fetchTwseValuation, fetchYahooValuation } from './sources/valuation'
 import type { Bar } from './types'
 import type { Market } from './levels'
@@ -31,6 +32,8 @@ export interface IngestResult {
   bars: number
   date?: string
   error?: string
+  /** 資料健檢抓到的異常。有異常不代表失敗——資料仍然寫入，但要留下紀錄 */
+  issues?: Issue[]
 }
 
 /**
@@ -70,6 +73,10 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
     if (bars.length === 0) throw new Error('來源沒有回傳任何 K 棒')
 
     const kept = bars.slice(-KEEP_BARS)
+
+    // 寫進資料庫之前先問「這批資料本身合理嗎」。
+    // 之前的每個資料錯誤都是眼睛看出來的，那不是系統。
+    const issues = checkBars(sym.code, sym.market, kept)
 
     // 名稱查得到就順手補上（TWSE 不回名稱，Yahoo 會）
     if (name && !sym.name_zh) {
@@ -135,7 +142,12 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
       await db.from('daily_bars').delete().eq('symbol_id', sym.id).gt('d', newest)
     }
 
-    return { code: sym.code, ok: true, bars: kept.length, date: a.date }
+    issues.push(...checkAnalysis(sym.code, {
+      close: a.close, bb_lo: a.bb.lower, bb_mid: a.bb.mid, bb_up: a.bb.upper,
+      pct_b: a.pctB, k: a.k, d_val: a.d, ma60: a.ma60,
+    }))
+
+    return { code: sym.code, ok: true, bars: kept.length, date: a.date, issues }
   } catch (e) {
     return { code: sym.code, ok: false, bars: 0, error: e instanceof Error ? e.message : String(e) }
   }
@@ -161,12 +173,18 @@ export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
   }
 
   const failed = results.filter((r) => !r.ok)
+  const flagged = results.flatMap((r) => r.issues ?? [])
   if (runId !== undefined) {
     await db.from('job_runs').update({
       finished_at: new Date().toISOString(),
       ok: failed.length === 0,
       processed: results.filter((r) => r.ok).length,
-      error: failed.length > 0 ? failed.map((f) => `${f.code}: ${f.error}`).join('; ') : null,
+      // 健檢異常也寫進紀錄。抓失敗是「沒資料」，健檢異常是「資料可能是錯的」，
+      // 後者更危險——它會安靜地被畫成圖表。
+      error: [
+        ...failed.map((f) => `${f.code}: ${f.error}`),
+        ...flagged.map((i) => `⚠ ${i.code} ${i.date ?? ''} [${i.kind}] ${i.detail}`),
+      ].join('; ') || null,
     }).eq('id', runId)
   }
 

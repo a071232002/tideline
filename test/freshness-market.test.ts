@@ -52,9 +52,11 @@ describe('marketFreshness', () => {
     expect(f.kind).not.toBe('fresh')
   })
 
-  it('台股：今天跑過但只有昨天的 K 棒 → 休市', () => {
+  it('台股：收盤後跑過卻只有昨天的 K 棒 → 休市', () => {
+    // 抓取時間必須在 13:30 之後。早上抓的拿不到當天資料是理所當然的，
+    // 那是「尚未收盤」不是「休市」——見 freshness-pending.test.ts
     const f = marketFreshness('TW', {
-      lastOkAt: OK_TODAY, latestBarDate: '2026-08-18', today: '2026-08-19',
+      lastOkAt: '2026-08-19T15:00:00+08:00', latestBarDate: '2026-08-18', today: '2026-08-19',
     })
     expect(f.kind).toBe('holiday')
   })
@@ -76,7 +78,7 @@ describe('marketFreshness', () => {
       lastOkAt: OK_TODAY, latestBarDate: '2026-08-14', today: '2026-08-19',
     })
     expect(tw.kind).toBe('fresh')
-    expect(us.kind).toBe('holiday')
+    expect(us.kind).toBe('holiday')  // 07:32 已過美股 06:00 基準，所以是休市不是尚未收盤
   })
 
   it('文案要帶市場名稱，不然兩行看起來一模一樣', () => {

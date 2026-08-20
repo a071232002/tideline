@@ -12,6 +12,9 @@ for (const r of results) {
   console.log(r.ok
     ? `  ✓ ${r.code}  ${r.date}  ${r.bars} 根`
     : `  ✗ ${r.code}  ${r.error}`)
+  for (const i of r.issues ?? []) {
+    console.log(`      ⚠ ${i.date ?? ''} [${i.kind}] ${i.detail}`)
+  }
 }
 
 const failed = results.filter((r) => !r.ok).length

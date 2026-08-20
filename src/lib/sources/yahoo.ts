@@ -61,15 +61,23 @@ function isoDay(epochSec: number): string {
  */
 export function dropUnfinishedSession(
   bars: Bar[],
-  meta: { marketTime?: number; sessionEnd?: number },
+  meta: { marketTime?: number; sessionStart?: number; sessionEnd?: number },
 ): Bar[] {
-  const { marketTime, sessionEnd } = meta
+  const { marketTime, sessionStart, sessionEnd } = meta
   if (bars.length === 0) return bars
-  if (typeof marketTime !== 'number' || typeof sessionEnd !== 'number') return bars
+  if (typeof marketTime !== 'number' || typeof sessionStart !== 'number'
+    || typeof sessionEnd !== 'number') return bars
+
+  // 這一場還沒開始（盤前）：currentTradingPeriod 已經指向下一場，但
+  // regularMarketTime 仍停在上一場的收盤。那一根是完整的，不能丟。
+  if (marketTime < sessionStart) return bars
+
   if (marketTime >= sessionEnd) return bars // 已收盤
 
+  // 盤中：只有「當前這一場」那一根是半根。用時段的開始日判斷，
+  // 不要用 regularMarketTime 的日期——盤前那兩者指向不同天。
   const last = bars[bars.length - 1]!
-  if (last.date !== isoDay(marketTime)) return bars
+  if (last.date !== isoDay(sessionStart)) return bars
   return bars.slice(0, -1)
 }
 
@@ -115,6 +123,7 @@ export async function fetchYahooDailyBars(symbol: string, range = '1y'): Promise
     exchange: r.meta.exchangeName ?? '',
     bars: dropUnfinishedSession(sorted, {
       marketTime: r.meta.regularMarketTime,
+      sessionStart: r.meta.currentTradingPeriod?.regular?.start,
       sessionEnd: r.meta.currentTradingPeriod?.regular?.end,
     }),
     dividends,
