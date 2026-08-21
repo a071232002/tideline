@@ -88,3 +88,56 @@ describe('sortRows：其他排序', () => {
     expect(sortRows(rows, 'nope' as SortMode).map((r) => r.code)).toEqual(['B', 'A'])
   })
 })
+
+describe('模擬帳戶進了清單之後的排序', () => {
+  const base = { close: 100, chg_pct: 0, levels: [] as never[] }
+  const withSim = (code: string, over: Partial<SortableSim> = {}) => ({
+    ...base, code,
+    sim: { retPct: 0, excessPct: 0, shares: 0, pending: null, ...over },
+  })
+  type SortableSim = {
+    retPct: number; excessPct: number; shares: number
+    pending: { buy: boolean; sell: boolean; triggers: string[] } | null
+  }
+
+  it('報酬排序：高的在前，沒有帳戶的排最後', () => {
+    const rows = [
+      withSim('A', { retPct: -3 }),
+      { ...base, code: 'NOSIM', sim: null },
+      withSim('B', { retPct: 12 }),
+    ]
+    expect(sortRows(rows, 'sim').map((r) => r.code)).toEqual(['B', 'A', 'NOSIM'])
+  })
+
+  it('「該注意的」把明日有動作的排到最前面——那是唯一可以照做的事', () => {
+    // 跌破止跌本來是最高優先，但「明天要下單」比它更具體：
+    // 前者是狀態，後者是指令。
+    const rows = [
+      { ...base, code: 'STOP', close: 90, sim: null,
+        levels: [{ kind: 'stop' as const, lo: 100 }] },
+      withSim('TODO', { pending: { buy: true, sell: false, triggers: ['add'] } }),
+      withSim('QUIET'),
+    ]
+    expect(sortRows(rows, 'attention').map((r) => r.code)).toEqual(['TODO', 'STOP', 'QUIET'])
+  })
+
+  it('都有明日動作時，仍然照原本的狀態嚴重度排', () => {
+    const rows = [
+      { ...base, code: 'NEAR', close: 103,
+        levels: [{ kind: 'stop' as const, lo: 100 }],
+        sim: { retPct: 0, excessPct: 0, shares: 0,
+          pending: { buy: true, sell: false, triggers: ['add'] } } },
+      { ...base, code: 'BROKE', close: 90,
+        levels: [{ kind: 'stop' as const, lo: 100 }],
+        sim: { retPct: 0, excessPct: 0, shares: 0,
+          pending: { buy: false, sell: true, triggers: ['stop'] } } },
+    ]
+    expect(sortRows(rows, 'attention').map((r) => r.code)).toEqual(['BROKE', 'NEAR'])
+  })
+
+  it('沒有 sim 欄位的舊資料不會讓排序爆掉', () => {
+    const rows = [{ ...base, code: 'X' }, { ...base, code: 'A' }]
+    expect(sortRows(rows, 'sim').map((r) => r.code)).toEqual(['X', 'A'])
+    expect(() => sortRows(rows, 'attention')).not.toThrow()
+  })
+})

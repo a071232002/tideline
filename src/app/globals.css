@@ -330,8 +330,8 @@ a { color: inherit; }
 /* 清單列在窄螢幕改成堆疊，桌機維持一列 */
 .row {
   display: grid;
-  grid-template-columns: 150px 170px 1fr auto;
-  gap: 14px;
+  grid-template-columns: 132px 128px minmax(0, 1fr) 104px auto;
+  gap: 12px;
   align-items: start;
   padding: 14px 18px;
   border-bottom: 1px solid var(--line);
@@ -340,8 +340,14 @@ a { color: inherit; }
 @media (max-width: 720px) {
   .row { grid-template-columns: 1fr auto; gap: 6px 12px; }
   .row .rprice { grid-column: 1; }
+  .row .rsim { grid-column: 1 / -1; }
   .row .rwhy { grid-column: 1 / -1; }
   .row form { grid-row: 1; grid-column: 2; }
+  /* 手機沒有欄位可以擺，模擬改成一條橫排 */
+  .row .rsim {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding-top: 2px;
+  }
 }
 
 /* ---------------------------------------------------- 決策條（關鍵價位） */
@@ -486,6 +492,9 @@ a { color: inherit; }
   gap: 4px 14px;
 }
 .inlinecell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* 四位數的高價股（2330 的 2,445.00～2,470.00）在三分之一欄寬裡放不下。
+   允許折行——溢出去疊到隔壁欄比換行難讀得多（實測截圖才看得出來）。 */
+.inlinecell > .tnum { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
 @media (max-width: 720px) {
   .inlinelvl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -615,8 +624,8 @@ a { color: inherit; }
 /* 清單表頭：價位標籤放這裡，列裡就不必每列重複三次 */
 .listhead {
   display: grid;
-  grid-template-columns: 150px 170px 1fr auto;
-  gap: 14px;
+  grid-template-columns: 132px 128px minmax(0, 1fr) 104px auto;
+  gap: 12px;
   padding: 0 18px 8px;
 }
 .listhead .lvlhead {
@@ -833,4 +842,33 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 .simidle {
   margin: 12px 0 0; font-size: var(--t-micro); color: var(--ink2);
   line-height: var(--lh-normal);
+}
+
+/* ------------------------------------------------- 清單上的模擬帳戶
+ *
+ * 績效要能**並排比較**才有意義——一檔一檔點進去看，記不住上一檔是多少。
+ * 「明日要動作」更是一進站就該看到的東西，不該藏在第二層。
+ */
+.simtotal {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 10px 18px; margin: 0 0 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+}
+.simtotalmain { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.simtotal .lab { font-size: var(--t-label); color: var(--muted); }
+.simtotal b { font-weight: 800; }
+.simtotalpct { font-size: var(--n-sm); font-weight: 800; }
+.simtotal .fine { margin: 0; }
+
+.rsim { display: flex; flex-direction: column; gap: 2px; }
+.rsimret { font-size: var(--t-lead); font-weight: 800; }
+.rsimsub { font-size: var(--t-micro); color: var(--muted); }
+
+/* 明日有動作 —— 這是清單上唯一「可以照做」的東西，所以是唯一的實心徽章 */
+.todobadge {
+  align-self: flex-start;
+  font-size: var(--t-micro); font-weight: 700; letter-spacing: .02em;
+  color: var(--card); background: var(--blue);
+  border-radius: 99px; padding: 2px 8px; white-space: nowrap;
 }

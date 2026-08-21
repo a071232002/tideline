@@ -29,6 +29,23 @@ export interface WatchRow {
   /** 定調那半句（「短線轉弱、波段中性」），價位另外用 levels 呈現 */
   tone: string | null
   levels: { kind: 'sell' | 'stop' | 'add'; lo: number; hi?: number }[]
+  /**
+   * 模擬帳戶（PLAN §13.7）。
+   *
+   * 放進清單而不是只留在個股頁：績效要能**並排比較**才有意義，
+   * 一檔一檔點進去看記不住上一檔是多少。而「明天要做什麼」更是
+   * 一進站就該看到的東西，不該藏在第二層。
+   */
+  sim: {
+    retPct: number
+    excessPct: number
+    shares: number
+    currency: string
+    /** 換算成台幣的現值與本金，用來算跨市場的合計 */
+    equityTwd: number | null
+    initialTwd: number
+    pending: { buy: boolean; sell: boolean; triggers: string[] } | null
+  } | null
 }
 
 /**
@@ -63,6 +80,15 @@ export async function getFreshness(): Promise<MarketFreshness[]> {
 }
 
 /** 觀察清單總覽：一列一檔含當日狀態。走使用者身分，RLS 保證看不到別人的。 */
+/** 台幣化。美股帳戶內部記美元，合計要換回台幣才能加總（PLAN §13.2） */
+async function latestFxRate(): Promise<number | null> {
+  const db = createAdminClient()
+  const { data } = await db.from('fx_rates')
+    .select('rate').eq('pair', 'USDTWD')
+    .order('d', { ascending: false }).limit(1).maybeSingle()
+  return data ? Number(data.rate) : null
+}
+
 export async function getWatchlist(): Promise<WatchRow[]> {
   const supabase = await createClient()
   const { data: rows, error } = await supabase
@@ -104,6 +130,52 @@ export async function getWatchlist(): Promise<WatchRow[]> {
     newest.set(id, a)
   }
 
+  // 模擬帳戶：規則軌道的績效 ＋ 買進持有當對照。走使用者身分，RLS 保證
+  // 只讀得到自己的（實測第二個帳號打開同一頁完全看不到，見 e2e）。
+  const { data: accounts } = await supabase
+    .from('sim_accounts')
+    .select('id, symbol_id, track, initial_twd, initial_cash, currency, pending')
+    .in('symbol_id', ids)
+
+  const accIds = (accounts ?? []).map((a) => a.id as string)
+  const lastEquity = new Map<string, { equity: number; shares: number; retPct: number }>()
+  if (accIds.length > 0) {
+    const { data: eq } = await supabase
+      .from('sim_equity').select('account_id, d, equity, shares, ret_pct')
+      .in('account_id', accIds).order('d', { ascending: false })
+    for (const e of eq ?? []) {
+      const id = e.account_id as string
+      if (lastEquity.has(id)) continue
+      lastEquity.set(id, {
+        equity: Number(e.equity), shares: Number(e.shares), retPct: Number(e.ret_pct),
+      })
+    }
+  }
+
+  const fx = (accounts ?? []).some((a) => a.currency !== 'TWD') ? await latestFxRate() : null
+
+  const simBySymbol = new Map<string, WatchRow['sim']>()
+  for (const a of accounts ?? []) {
+    if (a.track !== 'rule') continue
+    const symbolId = a.symbol_id as string
+    const rule = lastEquity.get(a.id as string)
+    if (!rule) continue
+    const holdAcc = (accounts ?? []).find(
+      (x) => x.symbol_id === symbolId && x.track === 'hold')
+    const hold = holdAcc ? lastEquity.get(holdAcc.id as string) : undefined
+    const cur = a.currency as string
+    simBySymbol.set(symbolId, {
+      retPct: rule.retPct,
+      excessPct: hold ? rule.retPct - hold.retPct : 0,
+      shares: rule.shares,
+      currency: cur,
+      equityTwd: cur === 'TWD' ? rule.equity : (fx !== null ? rule.equity * fx : null),
+      initialTwd: Number(a.initial_twd),
+      pending: (a.pending as WatchRow['sim'] extends null ? never
+        : NonNullable<WatchRow['sim']>['pending']) ?? null,
+    })
+  }
+
   return rows.map((r) => {
     const s = r.symbols as unknown as {
       market: 'TW' | 'US'; code: string; name_zh: string | null
@@ -124,6 +196,7 @@ export async function getWatchlist(): Promise<WatchRow[]> {
 
     // headline 前半段是定調、後半段是價位；清單只留定調，價位用 LevelInline 排開
     const tone = verdict?.headline ? (verdict.headline.split('。')[0] ?? null) : null
+    const sim = simBySymbol.get(r.symbol_id as string) ?? null
     return {
       symbol_id: r.symbol_id as string,
       market: s.market, code: s.code,
@@ -136,6 +209,7 @@ export async function getWatchlist(): Promise<WatchRow[]> {
       d_val: (a?.d_val as number) ?? null,
       tone,
       levels,
+      sim,
     }
   })
 }

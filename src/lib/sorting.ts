@@ -5,13 +5,20 @@ import { levelStatus, type StatusKind } from './status'
  * 沉在最下面，狀態徽章等於白做。
  */
 
-export type SortMode = 'attention' | 'code' | 'change'
+export type SortMode = 'attention' | 'code' | 'change' | 'sim'
 
 interface SortableRow {
   code: string
   close: number | null
   chg_pct: number | null
   levels: { kind: 'sell' | 'stop' | 'add'; lo: number; hi?: number }[]
+  /** 模擬帳戶。沒開帳的標的是 null（剛加入、或資料不足） */
+  sim?: {
+    retPct: number
+    excessPct: number
+    shares: number
+    pending: { buy: boolean; sell: boolean; triggers: string[] } | null
+  } | null
 }
 
 /** 越小越前面。跌破止跌最需要反應，所以排最前。 */
@@ -28,6 +35,17 @@ const SEVERITY: Record<StatusKind, number> = {
 export function sortRows<T extends SortableRow>(rows: readonly T[], mode: SortMode): T[] {
   // 一律複製再排。就地排序會改到呼叫端的陣列，在 React 裡是災難來源。
   const out = [...rows]
+
+  if (mode === 'sim') {
+    return out.sort((a, b) => {
+      // 沒開帳的排最後，不要當成 0% 插進中間——「還沒有帳戶」跟「不賺不賠」
+      // 是兩件事
+      if (!a.sim && !b.sim) return 0
+      if (!a.sim) return 1
+      if (!b.sim) return -1
+      return b.sim.retPct - a.sim.retPct
+    })
+  }
 
   if (mode === 'code') {
     return out.sort((a, b) => a.code.localeCompare(b.code, 'en'))
@@ -50,7 +68,17 @@ export function sortRows<T extends SortableRow>(rows: readonly T[], mode: SortMo
         stop: r.levels.find((l) => l.kind === 'stop')?.lo ?? null,
         add: (r.levels.find((l) => l.kind === 'add') ?? null) as never,
       })
-      return { r, i, sev: SEVERITY[st.kind], dist: Math.abs(st.distancePct ?? 0) }
+      // 明日有動作的排在所有狀態之前。
+      //
+      // 「已跌破止跌」是**狀態**，「明天開盤賣出」是**指令**——後者更具體，
+      // 而且是這個站唯一可以照做的東西。狀態告訴你發生了什麼，
+      // 指令告訴你要做什麼，該注意的清單當然先給指令。
+      const hasTodo = r.sim?.pending != null
+      return {
+        r, i,
+        sev: (hasTodo ? -10 : 0) + SEVERITY[st.kind],
+        dist: Math.abs(st.distancePct ?? 0),
+      }
     })
     scored.sort((a, b) => {
       if (a.sev !== b.sev) return a.sev - b.sev

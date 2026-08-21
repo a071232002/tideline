@@ -21,9 +21,18 @@ function money(v: number | null): string {
 
 const SORTS: { key: SortMode; label: string }[] = [
   { key: 'attention', label: '該注意的' },
+  { key: 'sim', label: '報酬' },
   { key: 'change', label: '跌幅' },
   { key: 'code', label: '代號' },
 ]
+
+/** 明日動作的短標。清單一行放不下理由，只放方向——理由點進去看 */
+function todoLabel(p: NonNullable<NonNullable<WatchRow['sim']>['pending']>): string {
+  if (p.triggers.includes('stop')) return '明日出清'
+  if (p.buy && p.sell) return '明日調整'
+  if (p.sell) return '明日減碼'
+  return '明日買進'
+}
 
 export function WatchList({
   rows,
@@ -51,6 +60,27 @@ export function WatchList({
     return out
   }, [rows])
 
+  /**
+   * 合計。**跨市場只有換成同一個幣別才加得起來**，所以美股用最新匯率換台幣；
+   * 匯率缺漏時那一檔不計入，並在畫面上說明少算了幾檔——寧可少算也不要
+   * 用一個猜的匯率湊出一個看起來很完整的數字。
+   */
+  const total = useMemo(() => {
+    let cost = 0, value = 0, skipped = 0, n = 0
+    for (const r of rows) {
+      if (!r.sim) continue
+      if (r.sim.equityTwd === null) { skipped++; continue }
+      cost += r.sim.initialTwd
+      value += r.sim.equityTwd
+      n++
+    }
+    if (n === 0) return null
+    return { cost, value, pct: ((value - cost) / cost) * 100, n, skipped }
+  }, [rows])
+
+  const todoCount = useMemo(
+    () => rows.filter((r) => r.sim?.pending).length, [rows])
+
   const shown = useMemo(() => {
     const filtered = filter === 'ALL' ? rows : rows.filter((r) => r.market === filter)
     return sortRows(filtered, sort)
@@ -73,11 +103,32 @@ export function WatchList({
         </div>
       </div>
 
+      {total && (
+        <div className="simtotal" data-testid="sim-total">
+          <div className="simtotalmain">
+            <span className="lab">模擬合計</span>
+            <span className="tnum">
+              {Math.round(total.cost).toLocaleString('en-US')} →{' '}
+              <b>{Math.round(total.value).toLocaleString('en-US')}</b> 元
+            </span>
+            <span className={`tnum simtotalpct ${total.pct >= 0 ? 'chg-up' : 'chg-down'}`}>
+              {total.pct >= 0 ? '+' : ''}{total.pct.toFixed(2)}%
+            </span>
+          </div>
+          <span className="fine">
+            {total.n} 檔
+            {total.skipped > 0 && `（${total.skipped} 檔缺匯率未計入）`}
+            {todoCount > 0 ? `・明日有 ${todoCount} 檔要動作` : '・明日無動作'}
+          </span>
+        </div>
+      )}
+
       {shown.length > 0 && (
         <div className="listhead" aria-hidden="true">
           <span>標的</span>
           <span>收盤</span>
           <span className="lvlhead"><span>波段賣出</span><span>止跌</span><span>加碼</span></span>
+          <span>模擬</span>
           <span />
         </div>
       )}
@@ -149,7 +200,36 @@ export function WatchList({
                 </div>
               </div>
 
-              {/* 移除是破壞性動作，做成低調的文字鈕並要求確認，
+              {/* 模擬帳戶。欄位順序要跟表頭一致——一開始把它放在價位**前面**，
+                  於是三個價位被擠進 118px 的格子裡疊成一團（截圖立刻看得出來，
+                  但每一個數字都是對的，所以量測抓不到）。 */}
+              <div className="rsim" data-testid={`sim-${r.code}`}>
+                {r.sim ? (
+                  <>
+                    {r.sim.pending && (
+                      <span className="todobadge" data-testid={`todo-${r.code}`}>
+                        {todoLabel(r.sim.pending)}
+                      </span>
+                    )}
+                    <div className={`rsimret tnum ${r.sim.retPct >= 0 ? 'chg-up' : 'chg-down'}`}>
+                      {pct(r.sim.retPct)}
+                    </div>
+                    {/* 報酬率自己不能回答「準不準」——旁邊一定要有超額 */}
+                    <div className="rsimsub tnum">
+                      超額 <span className={r.sim.excessPct >= 0 ? 'chg-up' : 'chg-down'}>
+                        {pct(r.sim.excessPct)}
+                      </span>
+                    </div>
+                    <div className="rsimsub">
+                      {r.sim.shares > 0 ? '持有中' : '空手'}
+                    </div>
+                  </>
+                ) : (
+                  <span className="rsimsub">尚未開帳</span>
+                )}
+              </div>
+
+              {/* 移除是破壞性動作，做成低調的圖示鈕並要求確認，
                   不要跟主要動作搶注意力 */}
               <form action={removeAction} className="rowaction"
                 onSubmit={(e) => {
