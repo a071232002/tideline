@@ -3,6 +3,8 @@ import { createClient } from './supabase/server'
 import { createAdminClient } from './supabase/admin'
 import { CHART_BARS } from './pipeline'
 import { marketFreshness, taipeiToday, type MarketFreshness } from './freshness'
+import { trackStats, type StatTrade, type TrackStats } from './sim/stats'
+import type { EquityPoint } from './sim/engine'
 
 /**
  * 讀取層。資料一天只變一次，非常適合快取——但也因此**快取沒清就是整天看到舊資料**。
@@ -141,10 +143,14 @@ export async function getWatchlist(): Promise<WatchRow[]> {
   const accIds = (accounts ?? []).map((a) => a.id as string)
   const lastEquity = new Map<string, { equity: number; shares: number; retPct: number }>()
   if (accIds.length > 0) {
-    const { data: eq } = await supabase
+    // 只要每個帳戶最新的那一列。**不能不分頁**——這張表的總列數會超過
+    // PostgREST 的 1000 列預設上限，而截斷不會有任何錯誤訊息（見 fetchPaged）。
+    // 這裡先按帳戶、再按日期倒序，所以每個帳戶的第一列就是最新的。
+    const eq = await fetchPaged((from, to) => supabase
       .from('sim_equity').select('account_id, d, equity, shares, ret_pct')
-      .in('account_id', accIds).order('d', { ascending: false })
-    for (const e of eq ?? []) {
+      .in('account_id', accIds)
+      .order('account_id').order('d', { ascending: false }).range(from, to))
+    for (const e of eq) {
       const id = e.account_id as string
       if (lastEquity.has(id)) continue
       lastEquity.set(id, {
@@ -424,4 +430,141 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
     })
   }
   return out
+}
+
+/**
+ * 回顧頁（PLAN §11、§13.7）。
+ *
+ * 個股頁回答「今天怎麼做」，這一頁回答「過去做得怎麼樣」——
+ * 兩種心智狀態不要混在一起，所以是獨立的一頁而不是塞進個股頁。
+ */
+export interface ReviewTrack {
+  track: 'rule' | 'ai' | 'hold'
+  curve: { d: string; retPct: number }[]
+  stats: TrackStats
+}
+
+export interface ReviewSymbol {
+  symbolId: string
+  market: 'TW' | 'US'
+  code: string
+  name: string | null
+  currency: string
+  initialTwd: number
+  tracks: ReviewTrack[]
+  /** AI 那條有幾天沒跑到。一半以上 missing 的曲線不能拿來比較（§13.5） */
+  aiMissing: number
+}
+
+/**
+ * 分頁把整張表讀完。
+ *
+ * **PostgREST 預設一次最多回 1000 列，而且不會告訴你被截斷了。**
+ * 實測 2026-08-22：5 檔 × 3 軌道 × 114 天 ≈ 1710 列的淨值查詢被切一半，
+ * 後面的帳戶只拿到半截曲線，統計就用半截資料算——0050 顯示「在市 47/66 天」，
+ * 實際是 73/114。沒有錯誤訊息，數字看起來也完全合理。
+ *
+ * 這是 `sanity.ts` 開頭那句話的資料庫版本：錯得很像對的。
+ */
+async function fetchPaged<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
+  size = 1000,
+): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += size) {
+    const { data } = await page(from, from + size - 1)
+    if (!data || data.length === 0) break
+    out.push(...data)
+    if (data.length < size) break
+    // 安全閥：帳戶資料不該有幾十萬列，真的有就是別的地方壞了
+    if (out.length > 200_000) break
+  }
+  return out
+}
+
+export async function getReview(): Promise<ReviewSymbol[]> {
+  const supabase = await createClient()
+
+  // 標的另外查，不用 join——內嵌關聯會讓型別推斷崩掉，
+  // 而且這裡的資料量小到分兩次查完全不痛
+  const { data: accounts } = await supabase
+    .from('sim_accounts')
+    .select('id, symbol_id, track, initial_twd, initial_cash, currency')
+  if (!accounts || accounts.length === 0) return []
+
+  const symbolIds = [...new Set(accounts.map((a) => a.symbol_id as string))]
+  const { data: symRows } = await supabase
+    .from('symbols').select('id, market, code, name_zh, name_en').in('id', symbolIds)
+  const symById = new Map((symRows ?? []).map((r) => [r.id as string, r]))
+
+  const ids = accounts.map((a) => a.id as string)
+  // 一定要分頁：這三張表的列數輕易超過 PostgREST 的 1000 列預設上限
+  const eqRows = await fetchPaged((from, to) => supabase
+    .from('sim_equity').select('account_id, d, cash, shares, mark, equity, ret_pct')
+    .in('account_id', ids).order('account_id').order('d', { ascending: true })
+    .range(from, to))
+  const trRows = await fetchPaged((from, to) => supabase
+    .from('sim_trades')
+    .select('account_id, side, qty, price, fee, tax, cost_basis, triggers')
+    .in('account_id', ids).order('account_id').order('signal_d').range(from, to))
+  const logRows = await fetchPaged((from, to) => supabase
+    .from('sim_ai_log').select('account_id, status').in('account_id', ids)
+    .order('account_id').order('d').range(from, to))
+
+  const eqBy = new Map<string, EquityPoint[]>()
+  for (const e of eqRows) {
+    const id = e.account_id as string
+    const list = eqBy.get(id) ?? []
+    list.push({
+      d: e.d as string, cash: Number(e.cash), shares: Number(e.shares),
+      mark: Number(e.mark), equity: Number(e.equity), retPct: Number(e.ret_pct),
+    })
+    eqBy.set(id, list)
+  }
+
+  const trBy = new Map<string, StatTrade[]>()
+  for (const t of trRows) {
+    const id = t.account_id as string
+    const list = trBy.get(id) ?? []
+    list.push({
+      side: t.side as 'buy' | 'sell', qty: Number(t.qty), price: Number(t.price),
+      fee: Number(t.fee), tax: Number(t.tax),
+      costBasis: t.cost_basis === null ? null : Number(t.cost_basis),
+      triggers: (t.triggers as string[]) ?? [],
+    })
+    trBy.set(id, list)
+  }
+
+  const missingBy = new Map<string, number>()
+  for (const l of logRows) {
+    if (l.status === 'ok') continue
+    const id = l.account_id as string
+    missingBy.set(id, (missingBy.get(id) ?? 0) + 1)
+  }
+
+  const bySymbol = new Map<string, ReviewSymbol>()
+  for (const a of accounts) {
+    const sid = a.symbol_id as string
+    const s = symById.get(sid)
+    if (!s) continue
+    if (!bySymbol.has(sid)) {
+      bySymbol.set(sid, {
+        symbolId: sid, market: s.market as 'TW' | 'US', code: s.code as string,
+        name: (s.name_zh as string) ?? (s.name_en as string) ?? null,
+        currency: a.currency as string,
+        initialTwd: Number(a.initial_twd),
+        tracks: [], aiMissing: 0,
+      })
+    }
+    const row = bySymbol.get(sid)!
+    const curve = eqBy.get(a.id as string) ?? []
+    row.tracks.push({
+      track: a.track as ReviewTrack['track'],
+      curve: curve.map((e) => ({ d: e.d, retPct: e.retPct })),
+      stats: trackStats(curve, trBy.get(a.id as string) ?? [], Number(a.initial_cash)),
+    })
+    if (a.track === 'ai') row.aiMissing = missingBy.get(a.id as string) ?? 0
+  }
+
+  return [...bySymbol.values()].sort((a, b) => a.code.localeCompare(b.code, 'en'))
 }

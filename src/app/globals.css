@@ -909,3 +909,63 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 /* 股數與參考價：跟指令同一行、同一階——沒有它們，指令還是不能照做 */
 .simnextqty { font-size: var(--t-lead); font-weight: 800; color: var(--ink); }
 .simnextref { font-size: var(--t-micro); font-weight: 400; color: var(--muted); }
+
+/* ------------------------------------------------------------ 回顧頁
+ *
+ * 個股頁回答「今天怎麼做」，這一頁回答「過去做得怎麼樣」（PLAN §11）。
+ * 每一區塊都以**超額報酬**領銜——報酬率自己答不了「準不準」。
+ */
+.revverdict {
+  padding: 12px 18px; margin: 0 0 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  font-size: var(--t-lead);
+}
+.revverdict b { font-weight: 800; }
+
+.revhead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.revhead h2 { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+.revhead a { color: inherit; text-decoration: none; }
+.revhead a:hover { text-decoration: underline; }
+.revname { font-size: var(--t-body); font-weight: 400; color: var(--muted); }
+
+.revstats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px 14px; margin: 0 0 14px;
+}
+.revstats > div { min-width: 0; }
+.revstats dt { font-size: var(--t-micro); color: var(--muted); }
+.revstats dd { margin: 2px 0 0; font-size: var(--t-body); font-weight: 700; color: var(--ink); }
+/* 「準不準」的答案在這一格。它跨兩欄、字級大一階，其餘都是佐證 */
+.revstats .lead { grid-column: span 2; }
+.revstats .lead dd { font-size: var(--n-md); font-weight: 800; }
+@media (max-width: 480px) {
+  .revstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .revstats .lead { grid-column: 1 / -1; }
+}
+
+.revlink {
+  margin-left: 10px; color: var(--blue); text-decoration: none;
+  font-weight: 600; white-space: nowrap;
+}
+.revlink:hover { text-decoration: underline; }
+
+/* 一句話說清楚這張卡在算什麼。少了它，下面每個數字都要讀者自己猜前提。 */
+.simlede {
+  margin: 10px 0 0; font-size: var(--t-label); color: var(--ink2);
+  line-height: var(--lh-normal);
+}
+.simlede b { color: var(--ink); font-weight: 700; }
+.sim .simhead .revlink { margin-left: 0; }
+
+/* 一次都沒進場時的說明。沒有它，「差距 −137%」會被讀成策略慘敗，
+   實際上是從頭到尾沒參與——完全不同的一件事。 */
+.revnote {
+  margin: 0 0 12px; padding: 9px 12px;
+  border: 1px solid var(--line); border-left: 3px solid var(--muted);
+  border-radius: 8px; background: var(--bg);
+  font-size: var(--t-micro); color: var(--ink2); line-height: var(--lh-normal);
+}
+.revnote b { color: var(--ink); }

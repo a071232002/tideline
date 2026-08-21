@@ -28,10 +28,10 @@ const SORTS: { key: SortMode; label: string }[] = [
 
 /** 明日動作的短標。清單一行放不下理由，只放方向——理由點進去看 */
 function todoLabel(p: NonNullable<NonNullable<WatchRow['sim']>['pending']>): string {
-  if (p.triggers.includes('stop')) return '明日出清'
-  if (p.buy && p.sell) return '明日調整'
-  if (p.sell) return '明日減碼'
-  return '明日買進'
+  if (p.triggers.includes('stop')) return '明天賣光'
+  if (p.buy && p.sell) return '明天調整'
+  if (p.sell) return '明天賣一半'
+  return '明天買進'
 }
 
 export function WatchList({
@@ -109,7 +109,7 @@ export function WatchList({
       {total && (
         <div className="simtotal" data-testid="sim-total">
           <div className="simtotalmain">
-            <span className="lab">模擬合計</span>
+            <span className="lab">照建議做的話</span>
             <span className="tnum">
               {Math.round(total.cost).toLocaleString('en-US')} →{' '}
               <b>{Math.round(total.value).toLocaleString('en-US')}</b> 元
@@ -122,6 +122,11 @@ export function WatchList({
             {total.n} 檔
             {total.skipped > 0 && `（${total.skipped} 檔缺匯率未計入）`}
             {todoCount > 0 ? `・明日有 ${todoCount} 檔要動作` : '・明日無動作'}
+            {/* 回顧的入口就放在合計旁邊——看到總報酬之後，
+                下一個問題一定是「所以這套規則到底行不行」 */}
+            <NavLink href="/review" className="revlink" data-testid="review-link">
+              回顧 →
+            </NavLink>
           </span>
         </div>
       )}
@@ -131,7 +136,7 @@ export function WatchList({
           <span>標的</span>
           <span>收盤</span>
           <span className="lvlhead"><span>波段賣出</span><span>止跌</span><span>加碼</span></span>
-          <span>模擬</span>
+          <span>照建議做</span>
           <span />
         </div>
       )}
@@ -219,17 +224,18 @@ export function WatchList({
                       {pct(r.sim.retPct)}
                     </div>
                     {/* 報酬率自己不能回答「準不準」——旁邊一定要有超額 */}
+                    {/* 「超額」是行話。這裡要說的是「跟買了不動比，差多少」 */}
                     <div className="rsimsub tnum">
-                      超額 <span className={r.sim.excessPct >= 0 ? 'chg-up' : 'chg-down'}>
+                      vs 不動 <span className={r.sim.excessPct >= 0 ? 'chg-up' : 'chg-down'}>
                         {pct(r.sim.excessPct)}
                       </span>
                     </div>
                     <div className="rsimsub">
-                      {r.sim.shares > 0 ? '持有中' : '空手'}
+                      {r.sim.shares > 0 ? '目前有股票' : '目前是現金'}
                     </div>
                   </>
                 ) : (
-                  <span className="rsimsub">尚未開帳</span>
+                  <span className="rsimsub">還沒開始模擬</span>
                 )}
               </div>
 

@@ -328,6 +328,7 @@ async function writeTrack(
       triggers: t.triggers, decided_by: t.decidedBy,
       confidence: t.confidence ?? null,
       overrode_stop: t.overrodeStop,
+      cost_basis: t.costBasis,
       reason: t.reason ?? null,
       // AI 的決定是當天真的做的；規則的則跟著產生訊號那天的分析走
       origin: t.decidedBy === 'ai' ? 'live' : (originByDate.get(t.signalD) ?? 'backfill'),

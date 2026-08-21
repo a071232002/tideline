@@ -1,4 +1,5 @@
 import type { SimTrack } from '@/lib/data'
+import { NavLink } from './NavLink'
 
 /**
  * 模擬帳戶（PLAN §13.7）。
@@ -14,8 +15,15 @@ import type { SimTrack } from '@/lib/data'
  *     要捲兩個螢幕才看得到，而那是整頁唯一可以照做的指令。
  */
 
+/**
+ * 軌道的名字要用**讀者的話**，不是我們內部的名字。
+ *
+ * 「規則」「買進持有」是實作用語：前者其實是「照這個站的建議做」，
+ * 後者是「第一天買了就不動」。把內部命名直接搬到畫面上，
+ * 讀者得先猜這兩個詞是什麼意思，才談得上看懂數字。
+ */
 const LABEL: Record<SimTrack['track'], string> = {
-  ai: 'AI', rule: '規則', hold: '買進持有',
+  ai: 'AI 判斷', rule: '照建議做', hold: '買了不動',
 }
 
 const pct = (v: number | null) =>
@@ -66,9 +74,16 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
   return (
     <section className="card sim" data-testid="sim-card">
       <div className="simhead">
-        <h2>模擬帳戶</h2>
-        <span className="fine tnum">本金 {money(lead.initialTwd, 'TWD')} 元／{LABEL[lead.track]}</span>
+        <h2>如果照建議做</h2>
+        <NavLink href="/review" className="revlink">全部回顧 →</NavLink>
       </div>
+
+      {/* 一句話說清楚這張卡在算什麼。少了它，下面每個數字都要讀者自己猜前提 */}
+      <p className="simlede">
+        假設從 {lead.curve[0]?.d ?? '—'} 起、用{' '}
+        <b className="tnum">{money(lead.initialTwd, 'TWD')} 元</b>
+        完全照這一頁的價位買賣（不加碼、不追高），到今天會變成：
+      </p>
 
       {/* 「明日開盤將執行」不在這張卡裡——它被移到決策條下方（SimNext.tsx）。
           這張卡是回顧，那一行是指令，兩種閱讀狀態不要混在一起。 */}
@@ -79,29 +94,33 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
             data-testid="sim-ret">{pct(lead.retPct)}</div>
         </div>
         <div className="simscore">
-          <div className="lab">買進持有</div>
+          <div className="lab">{LABEL.hold}</div>
           <div className={`num tnum ${hold.retPct >= 0 ? 'chg-up' : 'chg-down'}`}
             data-testid="sim-hold">{pct(hold.retPct)}</div>
         </div>
         <div className="simscore">
-          {/* 「準不準」的答案在這一格，不在左邊那格 */}
-          <div className="lab">超額</div>
+          {/* 「準不準」的答案在這一格，不在左邊那格。
+              「超額報酬」是行話——寫成「差距」才看得懂在比什麼 */}
+          <div className="lab">差距</div>
           <div className={`num tnum ${excess >= 0 ? 'chg-up' : 'chg-down'}`}
             data-testid="sim-excess">{pct(excess)}</div>
         </div>
       </div>
 
-      {/* 一句話的結論。AI 軌道的狀態不是結論，移到最下面的假設行 */}
+      {/* 一句話的結論，而且要說出**多賺還是少賺**，不要只丟一個正負號 */}
       <p className="simwhy">
-        {excess >= 0 ? '贏過買進持有，進出是有意義的。' : '輸給買進持有，不如什麼都不做。'}
+        {excess >= 0
+          ? `照建議進出，比買了不動多賺 ${excess.toFixed(2)}%。`
+          : `照建議進出，反而比買了不動少賺 ${Math.abs(excess).toFixed(2)}%。`}
       </p>
 
       <dl className="simstats tnum">
-        <div><dt>持股</dt><dd>{market === 'TW' ? Math.round(lead.shares) : lead.shares.toFixed(4)} 股</dd></div>
+        <div><dt>現在持股</dt><dd>{market === 'TW' ? Math.round(lead.shares) : lead.shares.toFixed(4)} 股</dd></div>
         <div><dt>現金</dt><dd>{money(lead.cash, cur)}</dd></div>
-        <div><dt>在市</dt><dd>{lead.daysInMarket}/{lead.totalDays} 天（{inMarketPct}%）</dd></div>
-        <div><dt>交易</dt><dd>{lead.trades} 次</dd></div>
-        <div><dt>費用</dt><dd>{money(rule.totalFees, cur)}（{feePct.toFixed(2)}%）</dd></div>
+        {/* 「在市」是行話。真正要說的是「有幾天手上真的有股票，其餘都是現金」 */}
+        <div><dt>有股票的天數</dt><dd>{lead.daysInMarket}/{lead.totalDays}（{inMarketPct}%）</dd></div>
+        <div><dt>買賣次數</dt><dd>{lead.trades} 次</dd></div>
+        <div><dt>手續費與稅</dt><dd>{money(rule.totalFees, cur)}（{feePct.toFixed(2)}%）</dd></div>
       </dl>
 
       {lead.shares === 0 && idleDays > 0 && (

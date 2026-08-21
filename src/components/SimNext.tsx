@@ -15,9 +15,9 @@ import { Icon } from './Icon'
  */
 
 function verb(p: NonNullable<SimTrack['pending']>): string {
-  if (p.triggers.includes('stop')) return '全部賣出'
-  if (p.buy && p.sell) return '買賣相抵後的淨額'
-  if (p.sell) return '減碼賣出'
+  if (p.triggers.includes('stop')) return '全部賣掉'
+  if (p.buy && p.sell) return '買賣相抵，只送淨額'
+  if (p.sell) return '賣掉一半'
   return '買進'
 }
 
@@ -36,8 +36,8 @@ export function SimNext({ track, market }: {
   return (
     <p className={`simnext${act ? '' : ' quiet'}`} data-testid="sim-pending">
       {act && <Icon name="chevronUp" />}
-      <b>明日開盤</b>
-      <span className="simnextact">{act ? verb(p) : '不動作'}</span>
+      <b>明天開盤</b>
+      <span className="simnextact">{act ? verb(p) : '什麼都不用做'}</span>
 
       {/* 沒有股數與價位，這一行還是不能照做——讀完仍然不知道要在券商輸入什麼。
           明天的開盤價當然不知道，所以用今日收盤估，並且明講是估的。 */}

@@ -92,6 +92,13 @@ export interface Trade {
   decidedBy: 'rule' | 'ai'
   confidence?: string
   overrodeStop: boolean
+  /**
+   * 賣出當下的每股平均成本；買進是 null。
+   *
+   * 存這個是為了回顧頁能算「幾次裡幾次賺錢」。事後用其他方式回推都會失真——
+   * 部位是分批建的，成本基礎只有成交當下知道。
+   */
+  costBasis: number | null
 }
 
 export interface EquityPoint {
@@ -255,7 +262,7 @@ function fill(
     state.cash -= gross + fee
     state.shares += qty
     state.cost += gross + fee
-    return { ...base, side: 'buy', qty, fee, tax: 0 }
+    return { ...base, side: 'buy', qty, fee, tax: 0, costBasis: null }
   }
 
   const qty = Math.min(-net, state.shares)
@@ -274,7 +281,7 @@ function fill(
     state.shares = 0
     state.cost = 0
   }
-  return { ...base, side: 'sell', qty, fee, tax }
+  return { ...base, side: 'sell', qty, fee, tax, costBasis: avgCost }
 }
 
 /** 用今日收盤估明日開盤的成交量。相抵之後只剩淨額那一邊。 */
