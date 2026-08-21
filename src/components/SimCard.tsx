@@ -91,11 +91,9 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
         </div>
       </div>
 
+      {/* 一句話的結論。AI 軌道的狀態不是結論，移到最下面的假設行 */}
       <p className="simwhy">
-        {excess >= 0
-          ? '贏過買進持有——這段期間進出是有意義的。'
-          : '輸給買進持有——這段期間不如什麼都不做。'}
-        {aiLive || !ai ? '' : '　AI 軌道尚未累積資料（不回補，只能從上線那天開始長）。'}
+        {excess >= 0 ? '贏過買進持有，進出是有意義的。' : '輸給買進持有，不如什麼都不做。'}
       </p>
 
       <dl className="simstats tnum">
@@ -115,21 +113,22 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
       )}
 
       {lead.recent.length > 0 && (
-        <table className="simtrades tnum">
-          <tbody>
-            {lead.recent.map((t) => (
-              <tr key={`${t.signalD}-${t.side}`}>
-                <td>{t.fillD.slice(5)}</td>
-                <td className={t.side === 'buy' ? 'chg-down' : 'chg-up'}>
-                  {t.side === 'buy' ? '買' : '賣'}
-                </td>
-                <td>{market === 'TW' ? Math.round(t.qty) : t.qty.toFixed(4)}</td>
-                <td>{t.price.toFixed(2)}</td>
-                <td className="quiet">{t.triggers.join('+')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="simtrades">
+          {lead.recent.map((t) => (
+            <li key={`${t.signalD}-${t.side}`}>
+              <span className="tnum simtradehead">
+                <span className="simtraded">{t.fillD.slice(5)}</span>
+                {/* 買賣用 --buy / --sell，不要借漲跌色：
+                    那兩個是「該做什麼」，漲跌是「走了哪個方向」 */}
+                <span className={`simside ${t.side}`}>{t.side === 'buy' ? '買' : '賣'}</span>
+                <span>{market === 'TW' ? Math.round(t.qty) : t.qty.toFixed(4)}</span>
+                <span className="quiet">@{t.price.toFixed(2)}</span>
+              </span>
+              {/* 沒有理由的成交紀錄等於沒有紀錄——原本這裡只有 `add`／`stop` */}
+              {t.reason && <span className="simtradewhy">{t.reason}</span>}
+            </li>
+          ))}
+        </ul>
       )}
 
       {tooSmall && (
@@ -144,6 +143,7 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
         次日開盤成交・含手續費與證交稅・未計滑價
         {market === 'TW' ? '・以零股計算・配息以現金入帳（未扣股利所得稅與二代健保）' : '・允許小數股'}
         ・樣本 {rule.totalDays} 個交易日・<b>不代表實際可獲得之報酬</b>
+        {aiLive || !ai ? '' : '・AI 軌道尚未開始（不回補）'}
       </p>
     </section>
   )

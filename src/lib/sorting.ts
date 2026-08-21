@@ -73,7 +73,10 @@ export function sortRows<T extends SortableRow>(rows: readonly T[], mode: SortMo
       // 「已跌破止跌」是**狀態**，「明天開盤賣出」是**指令**——後者更具體，
       // 而且是這個站唯一可以照做的東西。狀態告訴你發生了什麼，
       // 指令告訴你要做什麼，該注意的清單當然先給指令。
-      const hasTodo = r.sim?.pending != null
+      // `pending` 不動作時也會存在（它要帶「為什麼不做」的理由），
+      // 所以不能用 != null 判斷有沒有動作——那會讓每一列都被當成有事要做。
+      const p = r.sim?.pending
+      const hasTodo = p != null && (p.buy || p.sell)
       return {
         r, i,
         sev: (hasTodo ? -10 : 0) + SEVERITY[st.kind],

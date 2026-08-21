@@ -273,12 +273,15 @@ function pendingJson(r: SimResult): Record<string, unknown> | null {
   const o = r.pending.order
   const buy = (o.buyCash ?? 0) > 0
   const sell = (o.sellFraction ?? 0) > 0
-  if (!buy && !sell) return null
+  // 不動作也要留下來——理由在 `reason` 裡，「今天為什麼不做」跟
+  // 「今天要做什麼」一樣需要被說出口（PLAN §13.7）
   return {
     signalD: r.pending.signalD,
     buy, sell,
     sellFraction: o.sellFraction ?? null,
     triggers: o.triggers,
+    reason: o.reason ?? null,
+    estimate: r.pending.estimate,
   }
 }
 

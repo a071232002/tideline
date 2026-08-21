@@ -281,3 +281,89 @@ describe('邊界', () => {
     expect(r.equity[1]!.cash).toBeCloseTo(50_000 - t.qty * t.price - t.fee, 8)
   })
 })
+
+describe('出清之後不能留下浮點灰塵', () => {
+  /**
+   * 2026-08-22 實測：NVDA 全數賣出後 `shares` 是 8.881784197001252e-16。
+   *
+   * 那個數字大於 0，於是後果全部是真的：
+   *   - 止損條件 `shares > 0` 永遠成立 → **每天產生一筆假的「明日全部賣出」指令**
+   *   - `daysInMarket` 把之後每一天都算成「有部位」（NVDA 灌水到 79 天）
+   *   - 清單顯示「持有中」，其實兩個月前就出清了
+   *
+   * 成因是 `roundQty` 的乘除在浮點數上不可逆：賣出 3.8123 股之後，
+   * `shares - qty` 不會剛好是 0。小於一個可交易單位的餘額是**灰塵，不是部位**。
+   */
+  const bars = [
+    bar('2026-08-17', 100, 100),
+    bar('2026-08-18', 100, 100),
+    bar('2026-08-19', 100, 100),
+    bar('2026-08-20', 100, 100),
+  ]
+
+  /**
+   * 重現 NVDA 的實際路徑：分三批買進、兩次減碼一半、最後全數出清。
+   * 單獨一次買賣不會產生誤差——是 `roundQty` 的乘除在多次之後累積出來的。
+   */
+  const nvdaPath = [
+    bar('2026-06-01', 100, 100), bar('2026-06-02', 100, 100), bar('2026-06-03', 100, 100),
+    bar('2026-06-04', 100, 100), bar('2026-06-05', 100, 100), bar('2026-06-08', 100, 100),
+    bar('2026-06-09', 100, 100), bar('2026-06-10', 100, 100), bar('2026-06-11', 100, 100),
+  ]
+  const batch = (): Order => ({ buyCash: 1666.67, triggers: ['add'], decidedBy: 'rule' })
+  const usCfg = { ...base, market: 'US' as const, isEtf: false, initialCash: 5000 }
+
+  it('美股小數股：三買、兩次減半、全出之後，股數剛好是 0', () => {
+    const r = simulate(nvdaPath, on({
+      '2026-06-01': batch(), '2026-06-02': batch(), '2026-06-03': batch(),
+      '2026-06-04': sell(0.5), '2026-06-05': sell(0.5), '2026-06-08': sell(1),
+    }), usCfg)
+    expect(r.state.shares).toBe(0)
+    expect(r.equity[r.equity.length - 1]!.shares).toBe(0)
+  })
+
+  it('灰塵不能讓「已出清」看起來像「還有部位」', () => {
+    const r = simulate(nvdaPath, on({
+      '2026-06-01': batch(), '2026-06-02': batch(), '2026-06-03': batch(),
+      '2026-06-04': sell(0.5), '2026-06-05': sell(0.5), '2026-06-08': sell(1),
+    }), usCfg)
+    // 出清之後的每一天都不該再算成有部位
+    for (const e of r.equity.filter((x) => x.d > '2026-06-09')) {
+      expect(e.shares).toBe(0)
+    }
+  })
+
+  it('台股整數股全數賣出後，股數剛好是 0', () => {
+    const r = simulate(bars, on({
+      '2026-08-17': buy(20_000),
+      '2026-08-18': sell(1),
+    }), base)
+    expect(r.state.shares).toBe(0)
+  })
+
+  it('出清之後不再被算成「在市」', () => {
+    const r = simulate(bars, on({
+      '2026-08-17': { buyCash: 1234.5678, triggers: ['b'], decidedBy: 'rule' },
+      '2026-08-18': sell(1),
+    }), { ...base, market: 'US', isEtf: false })
+    // 8/18 成交買進、8/19 成交賣出 → 只有 8/18 那一天有部位
+    expect(r.daysInMarket).toBe(1)
+  })
+
+  it('出清之後成本歸零，批次額度整個放回來', () => {
+    const r = simulate(bars, on({
+      '2026-08-17': buy(20_000),
+      '2026-08-18': sell(1),
+    }), base)
+    expect(r.state.cost).toBe(0)
+  })
+
+  it('只賣一半時不會被誤判成灰塵而清掉', () => {
+    const r = simulate(bars, on({
+      '2026-08-17': buy(20_000),
+      '2026-08-18': sell(0.5),
+    }), base)
+    expect(r.state.shares).toBeGreaterThan(50)
+    expect(r.state.cost).toBeGreaterThan(0)
+  })
+})

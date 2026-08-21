@@ -730,7 +730,8 @@ a { color: inherit; }
 .stripwhy {
   margin-top: auto;
   font-size: var(--t-micro);
-  color: var(--ink2);
+  /* 佐證不是結論。它必須在（是使用者要求的），但不該跟價位搶注意力 */
+  color: var(--muted);
   line-height: 1.6;
   margin: 9px 0 0;
   padding-top: 9px;
@@ -752,17 +753,26 @@ a { color: inherit; }
 .sim .simhead .fine { margin: 0; }
 
 /* 唯一可以照做的一行，所以是唯一有底色的一行 */
+/* 明日開盤：**整頁唯一可以照做的東西，所以它是主角。**
+ *
+ * 原本它是夾在決策條與四格摘要之間、最小最淡的一條灰帶——三個區塊
+ * （決策條、明日動作、報酬率）字級幾乎一樣，讀者當然分不出重點在哪。
+ * 指令升到與頁面標題同一階，理由退到最小階；有動作與沒動作用邊色分。 */
 .simnext {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin: 12px 0 0; padding: 10px 12px;
-  border: 1px solid var(--line); border-left: 3px solid var(--blue);
-  border-radius: 8px; background: var(--bg);
-  font-size: var(--t-body);
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 12px 0 0; padding: 14px 16px;
+  border: 1px solid var(--line); border-left: 4px solid var(--blue);
+  border-radius: 10px; background: var(--card);
 }
-.simnext b { font-size: var(--t-label); color: var(--muted); font-weight: 700; }
-.simnext span { color: var(--ink); font-weight: 600; }
-.simnext svg { width: 16px; height: 16px; color: var(--blue); flex: 0 0 auto; }
-.simnext.quiet { border-left-color: var(--line); }
+.simnext b {
+  font-size: var(--t-label); color: var(--muted); font-weight: 700;
+  letter-spacing: .04em; flex: 0 0 auto;
+}
+.simnextact { font-size: var(--t-lead); font-weight: 800; color: var(--ink); }
+.simnext svg { width: 18px; height: 18px; color: var(--blue); flex: 0 0 auto; }
+/* 沒有動作時不要假裝有事發生：邊色收掉、指令退成一般字重 */
+.simnext.quiet { border-left-color: var(--line); background: var(--bg); }
+.simnext.quiet .simnextact { font-size: var(--t-body); font-weight: 600; color: var(--ink2); }
 .simnext.quiet svg { display: none; }
 
 .simscores {
@@ -776,8 +786,10 @@ a { color: inherit; }
   border-left: 1px solid var(--line); padding-left: 10px;
 }
 
+/* 卡片內部要有階層，不然五種資訊同級＝沒有重點：
+   報酬率（主）→ 一句結論 → 統計 → 成交紀錄 → 假設揭露（最輕） */
 .simwhy {
-  font-size: var(--t-body); color: var(--ink2);
+  font-size: var(--t-label); color: var(--ink2);
   margin: 10px 0 0; line-height: var(--lh-normal);
 }
 
@@ -872,3 +884,28 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   color: var(--card); background: var(--blue);
   border-radius: 99px; padding: 2px 8px; white-space: nowrap;
 }
+
+/* 明日動作：指令一行、理由一行。理由退一階，但一定要在。 */
+.simnextact { font-weight: 700; }
+.simnextwhy {
+  flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
+  line-height: var(--lh-normal);
+}
+
+/* 成交紀錄：一筆一段，理由跟在數字下面。
+   原本是一張只有 `add` / `stop` 的表——那不是理由，是內部代號。 */
+.simtrades { list-style: none; margin: 12px 0 0; padding: 0; }
+.simtrades li { padding: 6px 0; border-top: 1px solid var(--line); }
+.simtradehead { display: flex; align-items: baseline; gap: 8px; font-size: var(--t-body); }
+.simtraded { color: var(--muted); }
+.simside { font-weight: 700; }
+.simside.buy { color: var(--buy); }
+.simside.sell { color: var(--sell); }
+.simtradewhy {
+  display: block; font-size: var(--t-micro); color: var(--ink2);
+  margin-top: 2px; line-height: var(--lh-normal);
+}
+
+/* 股數與參考價：跟指令同一行、同一階——沒有它們，指令還是不能照做 */
+.simnextqty { font-size: var(--t-lead); font-weight: 800; color: var(--ink); }
+.simnextref { font-size: var(--t-micro); font-weight: 400; color: var(--muted); }

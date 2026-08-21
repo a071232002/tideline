@@ -1,7 +1,7 @@
 import type { Bar } from '../types'
 import type { Market } from '../levels'
 import type { FeeParams } from './params'
-import { affordableQty, buyFee, roundQty, sellCost } from './fees'
+import { affordableQty, buyFee, isDust, roundQty, sellCost } from './fees'
 
 /**
  * 模擬帳戶引擎（PLAN §13）。
@@ -103,9 +103,28 @@ export interface EquityPoint {
   retPct: number
 }
 
+/**
+ * 明日開盤大概會成交多少。
+ *
+ * 明天的開盤價當然不知道，所以用**今日收盤**當參考價。給估算不是為了精確，
+ * 是為了讓這一行真的能照做：「明日開盤買進一批」沒有股數也沒有價位，
+ * 讀完還是不知道要在券商輸入什麼。
+ *
+ * 標明是估算就好；假裝精確更糟，但完全不給數字等於這一行沒有用。
+ */
+export interface PendingEstimate {
+  side: 'buy' | 'sell'
+  /** 參考價＝今日收盤。明天的開盤價不會剛好等於它 */
+  refPrice: number
+  qty: number
+  amount: number
+}
+
 export interface PendingOrder {
   signalD: string
   order: Order
+  /** 不動作、或算出來連一股都買不到時是 null——不要生一個 0 出來 */
+  estimate: PendingEstimate | null
 }
 
 export interface SimResult {
@@ -169,7 +188,9 @@ export function simulate(bars: readonly Bar[], decide: Decider, cfg: SimConfig):
 
     // 3. 今天的訊號，留到明天成交
     const order = decide({ index: i, bar, state })
-    if (order) pending = { signalD: bar.date, order }
+    if (order) {
+      pending = { signalD: bar.date, order, estimate: estimateFill(order, bar.c, state, cfg) }
+    }
 
     // 4. 收盤結算
     const eq = state.cash + state.shares * bar.c
@@ -246,5 +267,34 @@ function fill(
   state.cash += gross - fee - tax
   state.shares -= qty
   state.cost = Math.max(0, state.cost - avgCost * qty)
+
+  // 賣完之後把灰塵掃掉。留著會讓「已出清」永遠看起來像「還有部位」——
+  // 止損天天觸發、在市天數灌水，而且完全不會報錯（見 fees.ts 的 isDust）。
+  if (isDust(market, state.shares)) {
+    state.shares = 0
+    state.cost = 0
+  }
   return { ...base, side: 'sell', qty, fee, tax }
+}
+
+/** 用今日收盤估明日開盤的成交量。相抵之後只剩淨額那一邊。 */
+function estimateFill(
+  o: Order, refPrice: number, state: Readonly<AccountState>, cfg: SimConfig,
+): PendingEstimate | null {
+  if (!(refPrice > 0)) return null
+  const buyQty = o.buyCash && o.buyCash > 0
+    ? affordableQty(cfg.market, Math.min(o.buyCash, state.cash), refPrice, cfg.fees)
+    : 0
+  const sellQty = o.sellFraction && o.sellFraction > 0
+    ? Math.min(roundQty(cfg.market, state.shares * o.sellFraction), state.shares)
+    : 0
+  const net = buyQty - sellQty
+  if (net === 0) return null
+  const qty = Math.abs(net)
+  return {
+    side: net > 0 ? 'buy' : 'sell',
+    refPrice,
+    qty,
+    amount: qty * refPrice,
+  }
 }

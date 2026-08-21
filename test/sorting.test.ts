@@ -135,6 +135,17 @@ describe('模擬帳戶進了清單之後的排序', () => {
     expect(sortRows(rows, 'attention').map((r) => r.code)).toEqual(['BROKE', 'NEAR'])
   })
 
+  it('pending 存在但不動作時，不算「該注意的」', () => {
+    // pending 不動作時也會有物件（它要帶「為什麼不做」的理由）。
+    // 用 != null 判斷會讓每一列都被當成有事要做，徽章就等於沒有訊號。
+    const rows = [
+      withSim('IDLE', { pending: { buy: false, sell: false, triggers: [] } }),
+      { ...base, code: 'STOP', close: 90, sim: null,
+        levels: [{ kind: 'stop' as const, lo: 100 }] },
+    ]
+    expect(sortRows(rows, 'attention').map((r) => r.code)).toEqual(['STOP', 'IDLE'])
+  })
+
   it('沒有 sim 欄位的舊資料不會讓排序爆掉', () => {
     const rows = [{ ...base, code: 'X' }, { ...base, code: 'A' }]
     expect(sortRows(rows, 'sim').map((r) => r.code)).toEqual(['X', 'A'])

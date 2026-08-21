@@ -50,6 +50,39 @@ export interface RuleDay {
   dPrev: number | null
 }
 
+const n2 = (v: number) => v.toFixed(2)
+const n1 = (v: number) => v.toFixed(1)
+
+/**
+ * 每一筆買賣的理由，以及**沒有買賣的理由**。
+ *
+ * 原本成交紀錄只有 `add` / `stop` 這種內部代號——使用者看到的是
+ * 「07-29 賣 485 96.95 stop」，那句話裡沒有任何一個字回答「為什麼賣」。
+ *
+ * 沒有動作的日子更需要理由：連續三週不動看起來像資料壞掉，
+ * 實際上是規則判斷不該進場。**沉默會被讀成故障。**
+ *
+ * 全部由程式用當天算出來的數字填空（PLAN §5 第 3 層），不是 AI 寫的，
+ * 所以每個數字都回得去 daily_analysis 對帳。
+ */
+function idleReason(
+  day: RuleDay, low: number, armed: boolean, dipped: boolean,
+  cooling: boolean, roomForBatch: boolean, p: RuleParams,
+): string {
+  if (cooling) return `止損後冷卻中，暫不進場（K ${n1(day.k)}）`
+  if (!roomForBatch) return `${p.batches} 批已投入完畢，等賣出訊號`
+  if (!armed) {
+    return dipped
+      ? `K 已回到低檔（${n1(day.k)}），等黃金交叉出現才進場`
+      : `K ${n1(day.k)} 還沒回到 ${p.addMaxK} 以下，進場訊號未成立`
+  }
+  if (low > day.levels.add.hi) {
+    return `訊號已成立，等價格回到加碼區 ${n2(day.levels.add.hi)}`
+      + `（今日最低 ${n2(low)}）`
+  }
+  return `價格已到加碼區，但 %b ${day.pctB.toFixed(2)} 仍高於 ${p.addMaxPctB}`
+}
+
 export function ruleDecider(
   days: Record<string, RuleDay>,
   initialCash: number,
@@ -66,6 +99,7 @@ export function ruleDecider(
 
     const { bar, state } = ctx
     const triggers: string[] = []
+    const reasons: string[] = []
     let sellFraction: number | undefined
     let buyCash: number | undefined
 
@@ -83,7 +117,10 @@ export function ruleDecider(
       cooldownUntilIndex = ctx.index + p.cooldownDays
       armed = false
       dipped = false
-      return { sellFraction: 1, triggers: ['stop'], decidedBy: 'rule' }
+      return {
+        sellFraction: 1, triggers: ['stop'], decidedBy: 'rule',
+        reason: `收盤 ${n2(bar.c)} 跌破止跌 ${n2(stop)}，這一段反彈結構破壞，全部出清`,
+      }
     }
 
     // 2. 減碼：盤中最高觸及賣出區下緣。§4 的用詞是「減碼」不是出清
@@ -91,6 +128,8 @@ export function ruleDecider(
     if (sellLo !== undefined && state.shares > 0 && bar.h >= sellLo) {
       sellFraction = p.trimFraction
       triggers.push('sell_zone')
+      reasons.push(`盤中最高 ${n2(bar.h)} 觸及賣出區 ${n2(sellLo)}，`
+        + `減碼 ${Math.round(p.trimFraction * 100)}%`)
     }
 
     // 3. 加碼：訊號要先架起來，價格與 %b 要到位，批次要有額度，且不在冷卻中
@@ -107,10 +146,21 @@ export function ruleDecider(
     ) {
       buyCash = batchSize
       triggers.push('add')
+      reasons.push(`回到加碼區 ${n2(day.levels.add.lo)}～${n2(day.levels.add.hi)}`
+        + `（今日最低 ${n2(bar.l)}），%b ${day.pctB.toFixed(2)}、`
+        + `K ${n1(day.k)} 低檔金叉後的分批進場`)
     }
 
-    if (triggers.length === 0) return null
-    const order: Order = { triggers, decidedBy: 'rule' }
+    // **不動作也要回一張單。** 沒有理由的沉默會被讀成故障——
+    // 引擎看到買賣量都是 0 就不會成交，但這句話會留在「明日開盤」那一行。
+    if (triggers.length === 0) {
+      return {
+        triggers: [], decidedBy: 'rule',
+        reason: idleReason(day, bar.l, armed, dipped, cooling, roomForBatch, p),
+      }
+    }
+
+    const order: Order = { triggers, decidedBy: 'rule', reason: reasons.join('；') }
     if (buyCash !== undefined) order.buyCash = buyCash
     if (sellFraction !== undefined) order.sellFraction = sellFraction
     return order

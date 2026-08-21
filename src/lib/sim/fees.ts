@@ -21,6 +21,20 @@ export const MIN_FEE_THRESHOLD_TWD =
 /** 台股可交易的最小單位：1 股（盤中零股）。美股允許小數股 */
 const QTY_STEP: Record<Market, number> = { TW: 1, US: 0.0001 }
 
+/**
+ * 小於半個可交易單位的餘額是**灰塵，不是部位**。
+ *
+ * `roundQty` 的乘除在浮點數上不可逆，多買多賣幾次之後，「全數出清」會留下
+ * 像 8.88e-16 這種殘值。它大於 0，於是所有 `shares > 0` 的判斷都會成立：
+ * 止損條件天天觸發、產生假的「明日全部賣出」指令、在市天數灌水、
+ * 清單顯示「持有中」——實測 NVDA 就是這樣（2026-08-22）。
+ *
+ * 沒有這道清理，錯誤不會有任何訊息，只會安靜地天天叫你賣一個空帳戶。
+ */
+export function isDust(market: Market, qty: number): boolean {
+  return qty < QTY_STEP[market] / 2
+}
+
 export function buyFee(market: Market, gross: number, p: FeeParams): number {
   if (!(gross > 0)) return 0
   if (market === 'US') return Math.max(p.usMinFee, gross * p.usFeeRate)

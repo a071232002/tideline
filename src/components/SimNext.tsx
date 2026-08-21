@@ -14,25 +14,46 @@ import { Icon } from './Icon'
  * 帳戶績效說「過去這樣做的結果」，那是另一件事，留在下面。
  */
 
-function text(p: NonNullable<SimTrack['pending']>): string {
-  const why = p.triggers.includes('stop') ? '跌破止跌'
-    : p.triggers.includes('sell_zone') ? '觸及賣出區'
-    : p.triggers.includes('add') ? '回到加碼區'
-    : p.triggers.join('、')
-  if (p.buy && p.sell) return `買賣相抵後的淨額（${why}）`
-  if (p.sell) return `賣出${p.triggers.includes('stop') ? '全部' : '一半'}持股（${why}）`
-  return `買進一批（${why}）`
+function verb(p: NonNullable<SimTrack['pending']>): string {
+  if (p.triggers.includes('stop')) return '全部賣出'
+  if (p.buy && p.sell) return '買賣相抵後的淨額'
+  if (p.sell) return '減碼賣出'
+  return '買進'
 }
 
-export function SimNext({ track }: { track: SimTrack | undefined }) {
+const qtyText = (q: number, market: 'TW' | 'US') =>
+  market === 'TW' ? `${Math.round(q)} 股` : `${q.toFixed(4)} 股`
+
+export function SimNext({ track, market }: {
+  track: SimTrack | undefined
+  market: 'TW' | 'US'
+}) {
   if (!track) return null
   const p = track.pending
+  const act = p && (p.buy || p.sell)
+  const est = p?.estimate ?? null
+
   return (
-    <p className={`simnext${p ? '' : ' quiet'}`} data-testid="sim-pending">
-      {p && <Icon name="chevronUp" />}
+    <p className={`simnext${act ? '' : ' quiet'}`} data-testid="sim-pending">
+      {act && <Icon name="chevronUp" />}
       <b>明日開盤</b>
-      <span>{p ? text(p) : '不動作'}</span>
-      <span className="simnextsrc">模擬帳戶</span>
+      <span className="simnextact">{act ? verb(p) : '不動作'}</span>
+
+      {/* 沒有股數與價位，這一行還是不能照做——讀完仍然不知道要在券商輸入什麼。
+          明天的開盤價當然不知道，所以用今日收盤估，並且明講是估的。 */}
+      {est && (
+        <span className="simnextqty tnum" data-testid="sim-pending-qty">
+          {qtyText(est.qty, market)}
+          <span className="simnextref">
+            　約 {Math.round(est.amount).toLocaleString('en-US')}
+            （以今日收盤 {est.refPrice.toFixed(2)} 估）
+          </span>
+        </span>
+      )}
+
+      {/* 「為什麼不做」跟「要做什麼」一樣需要被說出口。
+          沒有這句，連續幾週不動看起來就像資料壞掉。 */}
+      {p?.reason && <span className="simnextwhy">{p.reason}</span>}
     </p>
   )
 }

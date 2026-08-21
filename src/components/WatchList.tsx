@@ -78,8 +78,11 @@ export function WatchList({
     return { cost, value, pct: ((value - cost) / cost) * 100, n, skipped }
   }, [rows])
 
+  // `pending` 不動作時也存在（要帶「為什麼不做」的理由），所以一律看 buy/sell。
+  // 這個判斷在三個地方都要一致：排序、列上的徽章、這裡的合計。
   const todoCount = useMemo(
-    () => rows.filter((r) => r.sim?.pending).length, [rows])
+    () => rows.filter((r) => r.sim?.pending && (r.sim.pending.buy || r.sim.pending.sell)).length,
+    [rows])
 
   const shown = useMemo(() => {
     const filtered = filter === 'ALL' ? rows : rows.filter((r) => r.market === filter)
@@ -206,7 +209,8 @@ export function WatchList({
               <div className="rsim" data-testid={`sim-${r.code}`}>
                 {r.sim ? (
                   <>
-                    {r.sim.pending && (
+                    {/* `pending` 不動作時也存在（要帶理由），所以要看 buy/sell */}
+                    {r.sim.pending && (r.sim.pending.buy || r.sim.pending.sell) && (
                       <span className="todobadge" data-testid={`todo-${r.code}`}>
                         {todoLabel(r.sim.pending)}
                       </span>

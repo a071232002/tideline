@@ -41,6 +41,7 @@ export interface WatchRow {
     excessPct: number
     shares: number
     currency: string
+    /** 明日動作的理由，或「今天為什麼不做」 */
     /** 換算成台幣的現值與本金，用來算跨市場的合計 */
     equityTwd: number | null
     initialTwd: number
@@ -355,11 +356,17 @@ export interface SimTrack {
   curve: { d: string; retPct: number }[]
   recent: {
     signalD: string; fillD: string; side: 'buy' | 'sell'
-    qty: number; price: number; fee: number; tax: number; triggers: string[]
+    qty: number; price: number; fee: number; tax: number
+    triggers: string[]; reason: string | null
   }[]
   marks: { d: string; side: 'buy' | 'sell'; price: number; stop: boolean }[]
   /** 明天開盤要做的事。這是整張卡最重要的一行——一句可以照做的指令 */
-  pending: { signalD: string; buy: boolean; sell: boolean; triggers: string[] } | null
+  pending: {
+    signalD: string; buy: boolean; sell: boolean
+    triggers: string[]; reason: string | null
+    /** 用今日收盤估的明日成交量。不動作時是 null */
+    estimate: { side: 'buy' | 'sell'; refPrice: number; qty: number; amount: number } | null
+  } | null
 }
 
 export async function getSim(symbolId: string): Promise<SimTrack[]> {
@@ -378,7 +385,7 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
       .eq('account_id', id).order('d', { ascending: true })
     const { data: tr } = await supabase
       .from('sim_trades')
-      .select('signal_d, fill_d, side, qty, price, fee, tax, triggers')
+      .select('signal_d, fill_d, side, qty, price, fee, tax, triggers, reason')
       .eq('account_id', id).order('signal_d', { ascending: true })
 
     const curve = (eq ?? []).map((e) => ({ d: e.d as string, retPct: Number(e.ret_pct) }))
@@ -405,6 +412,7 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
         qty: Number(t.qty), price: Number(t.price),
         fee: Number(t.fee), tax: Number(t.tax),
         triggers: (t.triggers as string[]) ?? [],
+        reason: (t.reason as string) ?? null,
       })),
       marks: trades.map((t) => ({
         d: t.fill_d as string,

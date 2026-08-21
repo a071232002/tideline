@@ -132,7 +132,7 @@ export default async function StockPage({
 
       {/* 決策條說「哪些價位有意義」，這一行說「所以明天開盤做什麼」——
           兩句話是連著的。原本它在手機上位於第三屏（y=1604，視窗 780）。 */}
-      <SimNext track={simLead} />
+      <SimNext track={simLead} market={page.symbol.market} />
 
       <section className="tiles">
         <div className="tile">
@@ -174,11 +174,14 @@ export default async function StockPage({
         <ul className="clist">
           {(verdict.reasons ?? []).map((r) => <li key={r}>{r}</li>)}
         </ul>
+        {/* 原本這裡有 90 個字，其中「KD 9,3,3；布林 20,2σ；60 日均線」上面
+            四格摘要的標題已經寫過一次，「僅供參考、非投資建議」頁首的徽章也寫過。
+            重複的字不會讓人更謹慎，只會讓真正該讀的那幾行沉下去。
+            留下唯一不重複的資訊：來源，以及**這句話是規則拼的還是 AI 權衡的**。 */}
         <p className="fine" data-testid="disclaimer">
-          資料來源：{page.symbol.market === 'TW' ? 'TWSE 個股日成交資訊' : 'Yahoo Finance'}。
-          指標由每日收盤價自行計算（KD 9,3,3；布林 20,2σ；60 日均線）。
-          結論由{verdict.source === 'rule' ? '規則' : 'AI'}產生。
-          本報告為自動化技術分析，<b>僅供參考，非投資建議</b>；投資人應自行評估風險。
+          {page.symbol.market === 'TW' ? 'TWSE 收盤價' : 'Yahoo Finance'}
+          ・由{verdict.source === 'rule' ? '程式規則' : 'AI'}產生
+          ・<b>非投資建議</b>
         </p>
       </section>
 
