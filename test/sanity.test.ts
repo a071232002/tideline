@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { checkBars, checkAnalysis } from '../src/lib/sanity'
+import { checkBars, checkAnalysis, checkOrphanAnalysis } from '../src/lib/sanity'
 import type { Bar } from '../src/lib/types'
 
 /**
@@ -124,5 +124,41 @@ describe('checkAnalysis：算完之後的內部一致性', () => {
 
   it('缺值不當成錯——季線在資料不足時本來就是 null', () => {
     expect(checkAnalysis('0050', { ...good, ma60: null })).toEqual([])
+  })
+})
+
+describe('checkOrphanAnalysis：分析不能比 K 棒新', () => {
+  /**
+   * 2026-08-22 實測撞到的：0050 最新 K 棒是 08-19，最新分析卻是 08-21。
+   *
+   * 成因是 fixture 模式的抓取把 K 棒換成 fixture（結束於 08-19），
+   * 並依既有邏輯刪掉「比最新一根還新」的真實 K 棒；而 `daily_analysis`
+   * 依 PLAN §11 永不刪除，於是留下兩列沒有價格來源的孤兒。
+   *
+   * 後果不是少一天資料，是**頁面理直氣壯地顯示一個我們沒有價格的日期**：
+   * 標題寫「資料日期 2026-08-21、收盤 104.65」，而 08-21 那根 K 棒不存在。
+   * 沒有這個檢查，它不會有任何錯誤訊息。
+   */
+  it('分析日期比最新 K 棒新 → 抓出來', () => {
+    const issues = checkOrphanAnalysis('0050', '2026-08-19', ['2026-08-20', '2026-08-21'])
+    expect(issues).toHaveLength(1)
+    expect(issues[0]!.kind).toBe('orphan')
+    expect(issues[0]!.detail).toContain('2026-08-21')
+  })
+
+  it('分析日期等於最新 K 棒 → 正常', () => {
+    expect(checkOrphanAnalysis('0050', '2026-08-19', ['2026-08-19'])).toEqual([])
+  })
+
+  it('分析日期比較舊 → 正常（分析全部留著，本來就會有很多舊的）', () => {
+    expect(checkOrphanAnalysis('0050', '2026-08-19', ['2026-06-01', '2026-08-18'])).toEqual([])
+  })
+
+  it('沒有 K 棒時不誤報——那是另一種錯誤，由 checkBars 負責', () => {
+    expect(checkOrphanAnalysis('0050', null, ['2026-08-21'])).toEqual([])
+  })
+
+  it('沒有分析時不誤報', () => {
+    expect(checkOrphanAnalysis('0050', '2026-08-19', [])).toEqual([])
   })
 })

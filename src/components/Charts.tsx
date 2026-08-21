@@ -149,7 +149,8 @@ export function PriceChart({
 
   return (
     <>
-      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="收盤價與布林通道">
+      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="收盤價與布林通道"
+        data-last-bar={bars[bars.length - 1]!.d}>
         {niceTicks(ymin, ymax).map((v) => (
           <g key={v}>
             <line className="grid" x1={ML} y1={y(v)} x2={W - 14} y2={y(v)} />

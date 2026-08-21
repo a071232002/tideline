@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { validateSymbol } from '@/lib/sources/yahoo'
 import { ingestSymbol, type SymbolRow } from '@/lib/pipeline'
 import { invalidateAnalysis } from '@/lib/data'
+import { rebuildAll } from '@/lib/sim/run'
 
 /** `2330` → `2330.TW`；美股就是代號本身 */
 function yahooSymbolFor(market: 'TW' | 'US', code: string): string {
@@ -14,9 +15,12 @@ function yahooSymbolFor(market: 'TW' | 'US', code: string): string {
 /**
  * 加入觀察清單。
  *
- * 兩件事在這裡就要做完（PLAN §7、§9）：
+ * 三件事在這裡就要做完（PLAN §7、§9、§13）：
  * 1. 代號**當場驗證**，回不到資料就擋下並說明原因
  * 2. 加入的當下就**同步抓一次**，不要讓人等到隔天才看得到東西
+ * 3. **同時開好模擬帳戶**。原本只有每日排程會建帳，所以剛加入的標的整張
+ *    「模擬帳戶」卡連同「明日開盤」那一行都不存在，頁面看起來像少了一塊，
+ *    而且要等到隔天 07:30 才會冒出來。實測（2026-08-22 在瀏覽器上加 2454）。
  */
 export async function addSymbol(_prev: unknown, formData: FormData) {
   const raw = String(formData.get('code') ?? '').trim().toUpperCase()
@@ -70,6 +74,17 @@ export async function addSymbol(_prev: unknown, formData: FormData) {
   if (wErr) return { error: `加入清單失敗：${wErr.message}` }
 
   const result = await ingestSymbol(sym)
+
+  // 有了 K 棒與分析才建得了帳戶（起跑日要用「有分析資料的第一天」）。
+  // 建帳失敗不影響加入本身——清單與價位照常，只是模擬帳戶晚一天出現。
+  if (result.ok) {
+    try {
+      await rebuildAll(userId)
+    } catch {
+      // 隔天的排程會補上
+    }
+  }
+
   invalidateAnalysis()
   revalidatePath('/')
 

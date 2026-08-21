@@ -3,7 +3,7 @@ import { fetchTwseDailyBars } from './sources/twse'
 import { fetchYahooDailyBars } from './sources/yahoo'
 import { analyze } from './analyze'
 import { RULES_VERSION } from './backfill'
-import { checkBars, checkAnalysis, type Issue } from './sanity'
+import { checkBars, checkAnalysis, checkOrphanAnalysis, type Issue } from './sanity'
 import { fetchTwseValuation, fetchYahooValuation } from './sources/valuation'
 import { fetchUsdTwd, FX_PAIR, plausible } from './sources/fx'
 import { adjustBars, type Dividends, type Splits } from './adjust'
@@ -72,14 +72,18 @@ export async function fetchBars(
     // 少一次配息會讓帳戶少收一點現金，但擋住整檔的抓取更糟。
     let dividends: Dividends = {}
     let splits: Splits = {}
+    // TWSE 不回標的名稱，所以台股的名字只能從這支請求順手帶回來。
+    // 少了它，新加入的台股在頁面上只會顯示代號（實測 2454 就是一片空白）。
+    let name: string | null = null
     try {
       const y = await fetchYahooDailyBars(yahooSymbol, '1y')
       dividends = y.dividends
       splits = y.splits
+      name = y.name
     } catch {
       // 上層會從 issues 看到「沒有事件資料」
     }
-    return { bars, name: null, currency: 'TWD', dividends, splits }
+    return { bars, name, currency: 'TWD', dividends, splits }
   }
   const r = await fetchYahooDailyBars(yahooSymbol, '1y')
   return {
@@ -107,8 +111,12 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
     // 之前的每個資料錯誤都是眼睛看出來的，那不是系統。
     const issues = checkBars(sym.code, sym.market, kept)
 
-    // 名稱查得到就順手補上（TWSE 不回名稱，Yahoo 會）
-    if (name && !sym.name_zh) {
+    // 名稱查得到就順手補上（TWSE 不回名稱，Yahoo 會）。
+    //
+    // **fixture 模式一律不寫。** fixture 給的是「2454 (fixture)」這種佔位字串，
+    // 而 `symbols` 是全站共用的正式資料表——寫進去之後，正式頁面就會把
+    // 測試用的假名字當成標的名稱顯示出來。實測就發生過（2026-08-22 在瀏覽器上看到）。
+    if (name && !sym.name_zh && process.env.TIDELINE_FIXTURE !== '1') {
       await db.from('symbols').update({ name_en: name }).eq('id', sym.id)
     }
 
@@ -190,6 +198,15 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
     if (newest) {
       await db.from('daily_bars').delete().eq('symbol_id', sym.id).gt('d', newest)
     }
+
+    // 分析永不刪除、K 棒會被回收，兩者的最新日期會脫節。發生時頁面會顯示
+    // 一個我們沒有價格的日期，而且完全不會報錯——所以每次抓完都要問一次。
+    const { data: anDates } = await db.from('daily_analysis')
+      .select('d').eq('symbol_id', sym.id)
+      .gt('d', kept[kept.length - 1]!.date)
+    issues.push(...checkOrphanAnalysis(
+      sym.code, kept[kept.length - 1]!.date, (anDates ?? []).map((x) => x.d as string),
+    ))
 
     issues.push(...checkAnalysis(sym.code, {
       close: a.close, bb_lo: a.bb.lower, bb_mid: a.bb.mid, bb_up: a.bb.upper,

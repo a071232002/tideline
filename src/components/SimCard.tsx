@@ -45,6 +45,20 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
     ? Math.round((rule.daysInMarket / rule.totalDays) * 100) : 0
   const feePct = rule.initialCash > 0 ? (rule.totalFees / rule.initialCash) * 100 : 0
 
+  /**
+   * 空手多久了。
+   *
+   * 沒有這一句，卡片就只是丟出三個七月的日期——今天是八月底，看起來像資料壞掉。
+   * 實際上那是規則照著跑的結果：止損出清之後，「回低檔→金叉」的進場訊號
+   * 一直沒有重新架起，所以什麼都不該做。**「什麼都沒做」需要被說出來**，
+   * 否則沉默會被讀成故障。
+   */
+  const last = lead.recent[0]
+  const idleDays = last
+    ? lead.curve.filter((p) => p.d > last.fillD).length
+    : lead.curve.length
+  const idleWhy = last?.triggers.includes('stop') ? '止損出清後' : '上次減碼後'
+
   // 每批買不到 14,036 元就一直在撞最低手續費，那不是在測規則是在測手續費（§13.2）
   const perBatch = rule.initialCash / 3
   const tooSmall = market === 'TW' && perBatch < 14036
@@ -91,6 +105,14 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
         <div><dt>交易</dt><dd>{lead.trades} 次</dd></div>
         <div><dt>費用</dt><dd>{money(rule.totalFees, cur)}（{feePct.toFixed(2)}%）</dd></div>
       </dl>
+
+      {lead.shares === 0 && idleDays > 0 && (
+        <p className="simidle" data-testid="sim-idle">
+          {last
+            ? `${last.fillD} ${idleWhy}空手 ${idleDays} 個交易日——進場條件一直沒有同時成立。`
+            : `期間內未觸發任何進場條件，${idleDays} 個交易日全程空手。`}
+        </p>
+      )}
 
       {lead.recent.length > 0 && (
         <table className="simtrades tnum">

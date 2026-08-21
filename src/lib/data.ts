@@ -74,6 +74,21 @@ export async function getWatchlist(): Promise<WatchRow[]> {
   const ids = rows.map((r) => r.symbol_id as string)
   if (ids.length === 0) return []
 
+  // 每檔最新的**有 K 棒撐著的**那一天。
+  //
+  // 不能直接拿最新的 daily_analysis：分析依 PLAN §11 永不刪除，而 K 棒會被
+  // 抓取流程回收（保留視窗、以及「比最新一根還新」的清理）。實測 2026-08-22
+  // 就出現 0050 最新 K 棒 08-19、最新分析 08-21 的孤兒列——清單會顯示一個
+  // 我們沒有價格的日期，而且不會有任何錯誤訊息。
+  const { data: barTops } = await supabase
+    .from('daily_bars').select('symbol_id, d').in('symbol_id', ids)
+    .order('d', { ascending: false })
+  const latestBar = new Map<string, string>()
+  for (const b of barTops ?? []) {
+    const id = b.symbol_id as string
+    if (!latestBar.has(id)) latestBar.set(id, b.d as string)
+  }
+
   const { data: latest } = await supabase
     .from('daily_analysis')
     .select('symbol_id, d, close, chg_pct, k, d_val, verdict, levels')
@@ -83,7 +98,10 @@ export async function getWatchlist(): Promise<WatchRow[]> {
   const newest = new Map<string, Record<string, unknown>>()
   for (const a of latest ?? []) {
     const id = a.symbol_id as string
-    if (!newest.has(id)) newest.set(id, a)
+    if (newest.has(id)) continue
+    const bar = latestBar.get(id)
+    if (bar && (a.d as string) > bar) continue   // 孤兒，跳過
+    newest.set(id, a)
   }
 
   return rows.map((r) => {
@@ -155,13 +173,18 @@ export const getStockPage = unstable_cache(
       .eq('market', market).eq('code', code).maybeSingle()
     if (!sym) return null
 
-    const { data: analysis } = await db
-      .from('daily_analysis').select('*')
-      .eq('symbol_id', sym.id).order('d', { ascending: false }).limit(1).maybeSingle()
-
     const { data: bars } = await db
       .from('daily_bars').select('d, o, h, l, c')
       .eq('symbol_id', sym.id).order('d', { ascending: true })
+
+    // 只取「有 K 棒撐著」的最新分析。分析永不刪除、K 棒會被回收，
+    // 兩者的最新日期會脫節——實測 0050 分析到 08-21、K 棒只到 08-19，
+    // 頁面標題就寫著一個我們沒有價格的日期（sanity.ts 的 checkOrphanAnalysis）。
+    const latestBarDate = (bars ?? [])[(bars ?? []).length - 1]?.d as string | undefined
+    let analysisQuery = db.from('daily_analysis').select('*').eq('symbol_id', sym.id)
+    if (latestBarDate) analysisQuery = analysisQuery.lte('d', latestBarDate)
+    const { data: analysis } = await analysisQuery
+      .order('d', { ascending: false }).limit(1).maybeSingle()
 
     const { data: val } = await db
       .from('daily_valuation').select('*')

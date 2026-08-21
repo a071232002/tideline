@@ -828,3 +828,9 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 @media (max-width: 560px) {
   .wide-only { display: none !important; }
 }
+
+/* 空手的日子也要交代。沉默會被讀成故障——實測就是這樣被問的。 */
+.simidle {
+  margin: 12px 0 0; font-size: var(--t-micro); color: var(--ink2);
+  line-height: var(--lh-normal);
+}

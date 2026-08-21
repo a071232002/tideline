@@ -26,6 +26,7 @@ export type IssueKind =
   | 'bands'       // 布林三軌順序錯
   | 'pctb'        // %b 與三軌對不起來
   | 'kd'          // K/D 跑出 0–100
+  | 'orphan'      // 有分析、但沒有對應的 K 棒
 
 export interface Issue {
   code: string
@@ -167,4 +168,33 @@ export function checkAnalysis(code: string, a: AnalysisShape): Issue[] {
   }
 
   return issues
+}
+
+/**
+ * 分析不能比 K 棒新。
+ *
+ * 2026-08-22 實測撞到：0050 最新 K 棒是 08-19，最新分析卻是 08-21。
+ * 成因是 fixture 模式的抓取把 K 棒換成 fixture（結束於 08-19），並依既有邏輯
+ * 刪掉「比最新一根還新」的真實 K 棒；而 `daily_analysis` 依 PLAN §11 永不刪除，
+ * 於是留下兩列沒有價格來源的孤兒。
+ *
+ * 後果不是少一天資料，是**頁面理直氣壯地顯示一個我們沒有價格的日期**——
+ * 標題寫「資料日期 2026-08-21、收盤 104.65」，而那根 K 棒不存在。
+ * 模擬帳戶更糟：它只跑得到 08-19，頁面卻宣稱資料到 08-21。
+ *
+ * 「分析全部留著」是對的（那是回顧的素材），但**留著不等於可以拿來當今天**。
+ */
+export function checkOrphanAnalysis(
+  code: string,
+  latestBarDate: string | null,
+  analysisDates: readonly string[],
+): Issue[] {
+  if (latestBarDate === null || analysisDates.length === 0) return []
+  const orphans = analysisDates.filter((d) => d > latestBarDate).sort()
+  if (orphans.length === 0) return []
+  return [{
+    code, kind: 'orphan', date: orphans[orphans.length - 1],
+    detail: `有 ${orphans.length} 天的分析比最新 K 棒（${latestBarDate}）還新：`
+      + `${orphans.join('、')}。頁面會顯示一個我們沒有價格的日期`,
+  }]
 }
