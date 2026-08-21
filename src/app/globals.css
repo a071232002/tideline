@@ -12,24 +12,35 @@
      再加上實線邊框，卡片才會真的「浮」在紙上。 */
   --bg: #ece8de;
   --card: #fbf9f4;
-  /* 文字四階，用途固定不要混用：
+  /* 文字三階，用途固定不要混用：
      ink   數字與標題（主角）
      ink2  說明文字（讀得下去，但退一步）
      muted 標籤與中繼資料（需要時才看）
-     faint 分隔線層級的文字（幾乎只是存在感） */
+
+     **原本是四階，第四階 `--faint` 被移除了**（保留為 muted 的別名，
+     免得每個用到的地方都要改）。理由是量出來的：#a8a396 對紙色底
+     只有 2.39:1，`--muted` 的 #8a857a 也只有 3.49:1，
+     兩者都低於 WCAG 2.2 SC 1.4.3 對 12–13px 文字要求的 4.5:1。
+     實測整頁有 14 處不合格（e2e/audit.spec.ts）。
+
+     用「更淡的顏色」做階層，到第四階就只剩「看不清楚」——
+     那不是階層，是把免責聲明藏起來。階層改由**字級與字重**負責，
+     顏色只保留三階，而且每一階都過 4.5:1（含頁面底色，不只卡片底色）。 */
   --ink: #23211d;
-  --ink2: #5c584f;
-  --muted: #8a857a;
-  --faint: #a8a396;
+  --ink2: #5c584f;   /* 5.79:1 on --bg */
+  --muted: #696457;  /* 4.82:1 on --bg */
+  --faint: var(--muted);
   --line: #d8d3c6;
   --blue: #1f6fd0;
   --orange: #d9591f;
   /* 布林中軌用獨立色。原本跟 --stop 同為橘色，兩條線疊在圖上分不出來——
      一條是指標（現在在哪），一條是動作價位（跌破要反應），意義完全不同。 */
   --mid: #7a5cc4;
-  --sell: #c22f2f;
-  --stop: #cf6316;
-  --buy: #17683a;
+  --sell: #c22f2f;   /* 5.33:1 */
+  /* 原本 #cf6316 對紙色底只有 3.66:1，而「止跌」那個標籤是 13px——
+     不到大字的門檻，要 4.5:1。壓深一階到 5.0:1，圖上的線幾乎看不出差別。 */
+  --stop: #ad5211;   /* 5.00:1 */
+  --buy: #17683a;    /* 6.48:1 */
   /* 漲跌方向與買賣動作是**兩件事**，各用一組色票，不要互相借用：
      台股是紅漲綠跌（跟美股相反）。參考範本用的是美式的綠漲紅跌，
      這裡刻意不照抄——這個站是給台股使用者每天看的。 */
@@ -52,9 +63,9 @@
     --bg: #16150f;
     --card: #21201a;
     --ink: #f0ede4;
-    --ink2: #b6b0a2;
-    --muted: #8a8576;
-    --faint: #6d685c;
+    --ink2: #b6b0a2;   /* 7.56:1 on --card */
+    --muted: #949081;  /* 5.10:1 on --card */
+    --faint: var(--muted);
     --line: #37352c;
     --blue: #5b9df0;
     --orange: #e57a45;
@@ -76,7 +87,10 @@
   --card: #21201a;
   --ink: #ebe8df;
   --ink2: #b2ada0;
-  --muted: #8b8778;
+  --muted: #949081;
+  /* 手動深色原本漏了 --faint，於是它掉回淺色的 #a8a396——
+     同樣是深色，系統偏好與手動選擇長得不一樣。現在兩邊都是別名。 */
+  --faint: var(--muted);
   --line: #37352c;
   --blue: #5b9df0;
   --orange: #e57a45;
@@ -563,11 +577,13 @@ a { color: inherit; }
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 10px 0 14px;
+  /* 按鈕本身撐到 44 之後，這裡的上下留白要收回來，否則整條變成 68px 高 */
+  padding: 0 0 8px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 14px;
 }
 .brand {
+  display: inline-flex; align-items: center; min-height: 44px;
   font-weight: 800;
   font-size: var(--t-lead);
   letter-spacing: .06em;
@@ -583,9 +599,14 @@ a { color: inherit; }
   overflow: hidden;
   background: var(--bg);
 }
+/* 觸控目標：WCAG 2.2 SC 2.5.8 的下限是 24×24，Apple HIG 與 Material 是 44/48。
+   原本量到 38×26——桌機滑鼠按得到，手機拇指按不準（實測 e2e/audit.spec.ts）。
+   高度撐到 44，視覺上只是按鈕變高一點，密度沒有變差。 */
 .themebtn {
   appearance: none; font: inherit; font-size: var(--t-label); cursor: pointer;
-  border: 0; background: transparent; color: var(--ink2); padding: 5px 11px;
+  border: 0; background: transparent; color: var(--ink2);
+  padding: 5px 11px; min-height: 44px; min-width: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 .themebtn + .themebtn { border-left: 1px solid var(--line); }
 .themebtn.on { background: var(--card); color: var(--ink); font-weight: 700; }
@@ -617,7 +638,7 @@ a { color: inherit; }
 /* 只有圖示：一定要有 aria-label，滑過要有 title */
 .iconbtn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; padding: 0;
+  width: 44px; height: 44px; padding: 0;
   border: 1px solid transparent; border-radius: 8px;
   background: transparent; color: var(--muted); cursor: pointer;
 }
@@ -641,7 +662,10 @@ a { color: inherit; }
 .backlink {
   display: inline-flex;
   font-size: var(--t-body); color: var(--ink2); text-decoration: none;
-  margin-bottom: 8px;
+  /* 80×23 連 WCAG 2.2 SC 2.5.8 的 24px 下限都不到。撐高到 44 並用負邊界
+     把多出來的高度吃掉，版面位置不動，能按的範圍變成兩倍。 */
+  min-height: 44px; align-items: center;
+  margin: -10px 0 0;
 }
 .backlink:hover { color: var(--ink); }
 
@@ -774,4 +798,33 @@ a { color: inherit; }
     grid-column: 1 / -1; border-left: 0; padding-left: 0;
     border-top: 1px solid var(--line); padding-top: 8px;
   }
+}
+
+/* 圖表的兩種 viewBox 寬度（Charts.tsx 的 W_WIDE / W_NARROW）。
+   窄螢幕不是「把寬圖縮小」——縮小會把 11px 的軸標籤壓成 3.6px。
+   換一個窄的 viewBox，字級相對變大，才讀得到。 */
+.chart-narrow { display: none; }
+@media (max-width: 560px) {
+  .chart-wide { display: none; }
+  .chart-narrow { display: block; }
+}
+
+/* 「明日開盤」獨立於模擬帳戶卡之外，緊接決策條。
+   它是整頁唯一一句可以照做的指令，所以是唯一有色邊的一行。 */
+.simnext .simnextsrc {
+  margin-left: auto; font-size: var(--t-micro); color: var(--muted); font-weight: 400;
+}
+main > .simnext { margin: 0 0 14px; background: var(--card); }
+
+/* 只有一句話的卡：標題與內容併一行，不要為了「有一張卡」而佔掉 123px。 */
+.card.cardline {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 12px 20px;
+}
+.card.cardline h2 { margin: 0; flex: 0 0 auto; }
+.card.cardline .empty { margin: 0; }
+
+/* 窄螢幕收起來的說明。圖上已經直接標了顏色與價位，圖例再寫一次是重複。 */
+@media (max-width: 560px) {
+  .wide-only { display: none !important; }
 }

@@ -5,7 +5,20 @@
  * 否則深色模式下線條會消失。縮放靠 viewBox + width:100%，絕不橫向捲動。
  */
 
-const W = 920
+/**
+ * viewBox 的寬度。**這個數字決定手機上的字看不看得見。**
+ *
+ * SVG 的字級是 user unit，會跟著 viewBox 一起被縮放。920 寬的 viewBox 塞進
+ * 375px 的螢幕，縮放係數是 0.377——11px 的軸標籤實測只剩 **3.6px**。
+ * 那不是「小」，是不存在（實測見 e2e/audit.spec.ts）。
+ *
+ * 所以窄螢幕用一個窄的 viewBox。360 是量出來的：375px 螢幕扣掉版面留白後
+ * 容器約 359px，viewBox 取 360 → 縮放係數 ≈ 1，SVG 裡寫幾 px 就真的是幾 px。
+ * 兩種寬度各渲染一份、用 CSS 切換——沒有 JS、沒有 hydration、SSR 就決定好。
+ */
+export const W_WIDE = 920
+export const W_NARROW = 360
+
 const ML = 46
 const MT = 14
 
@@ -40,7 +53,7 @@ function niceTicks(min: number, max: number, count = 5): number[] {
 
 /** 圖一：收盤價＋布林通道＋三條水平價位線 */
 export function PriceChart({
-  bars, bands, levels, currency, history, marks,
+  bars, bands, levels, currency, history, marks, width = W_WIDE,
 }: {
   bars: Pt[]
   bands: Band[]
@@ -50,7 +63,10 @@ export function PriceChart({
   history?: LevelHistoryPoint[]
   /** 模擬帳戶的成交點。一眼就看得出是「低接高出」還是「追高殺低」。 */
   marks?: TradeMark[]
+  /** viewBox 寬度。窄螢幕傳 `W_NARROW`，否則字會縮到讀不到 */
+  width?: number
 }) {
+  const W = width
   const H = 380
   const PH = H - MT - 26
   const PW = W - ML - 14
@@ -99,7 +115,8 @@ export function PriceChart({
   const lastI = bars.length - 1
   const lastC = bars[lastI]!.c
 
-  const labelEvery = Math.ceil(bars.length / 6)
+  // 窄圖只放 4 個日期標籤：360 單位寬放 6 個「02-24」會黏在一起
+  const labelEvery = Math.ceil(bars.length / (W < 600 ? 4 : 6))
 
   // 歷史價位：階梯線（價位一天一個值，不該畫成平滑折線——它是離散的判斷）
   const idxByDate = new Map(bars.map((b, i) => [b.d, i]))
@@ -221,18 +238,21 @@ export function PriceChart({
           <text key={b.d} className="tick" x={x(i)} y={H - 6} textAnchor="middle">{b.d.slice(5)}</text>
         ) : null))}
       </svg>
+      {/* 圖例在手機上量到 121px，而圖本身只有 318px——說明佔了內容的 38%。
+          賣出／止跌／加碼三格是**純重複**：那三個價位就用同色標在圖上，
+          寫著「賣出 107.50」。窄螢幕收起來，圖例從 8 格降到 3 格。 */}
       <div className="legend">
         <span><i className="sw" style={{ borderColor: 'var(--blue)' }} />收盤價（末點＝今日）</span>
         <span><i className="sw" style={{ borderColor: 'var(--mid)' }} />布林中軌</span>
         <span><i className="sw" style={{ borderColor: 'var(--bandline)' }} />上下軌</span>
-        <span><i className="sw dash" style={{ borderColor: 'var(--sell)' }} />賣出</span>
-        <span><i className="sw dash" style={{ borderColor: 'var(--stop)' }} />止跌</span>
-        <span><i className="sw dash" style={{ borderColor: 'var(--buy)' }} />加碼</span>
+        <span className="wide-only"><i className="sw dash" style={{ borderColor: 'var(--sell)' }} />賣出</span>
+        <span className="wide-only"><i className="sw dash" style={{ borderColor: 'var(--stop)' }} />止跌</span>
+        <span className="wide-only"><i className="sw dash" style={{ borderColor: 'var(--buy)' }} />加碼</span>
         {(marks ?? []).length > 0 && (
-          <span><i className="sw" style={{ borderColor: 'var(--buy)' }} />▲買／▼賣（模擬帳戶）</span>
+          <span><i className="sw" style={{ borderColor: 'var(--buy)' }} />▲買／▼賣</span>
         )}
         {histPaths.length > 0 && (
-          <span style={{ color: 'var(--muted)' }}>
+          <span className="wide-only" style={{ color: 'var(--muted)' }}>
             階梯線＝<b>當時每天說的價位</b>（回頭看準不準）
           </span>
         )}
@@ -242,7 +262,11 @@ export function PriceChart({
 }
 
 /** 圖二：KD，含 20 / 80 參考線 */
-export function KdChart({ points }: { points: { d: string; k: number; d_val: number }[] }) {
+export function KdChart({ points, width = W_WIDE }: {
+  points: { d: string; k: number; d_val: number }[]
+  width?: number
+}) {
+  const W = width
   const H = 230
   const PH = H - MT - 26
   const PW = W - ML - 14
@@ -253,7 +277,7 @@ export function KdChart({ points }: { points: { d: string; k: number; d_val: num
 
   const kPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.k).toFixed(1)}`).join('')
   const dPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.d_val).toFixed(1)}`).join('')
-  const labelEvery = Math.ceil(points.length / 6)
+  const labelEvery = Math.ceil(points.length / (W < 600 ? 4 : 6))
 
   return (
     <>

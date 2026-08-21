@@ -1,5 +1,4 @@
 import type { SimTrack } from '@/lib/data'
-import { Icon } from './Icon'
 
 /**
  * 模擬帳戶（PLAN §13.7）。
@@ -10,8 +9,9 @@ import { Icon } from './Icon'
  *     那不是準，是拖後腿。只放單一個報酬率等於鼓勵自己誤讀，所以
  *     「準不準」的答案掛在**超額報酬**上，不是報酬率本身。
  *
- * 二、**「明天開盤將執行」放在最上面。** 最後一天的訊號還沒成交——
- *     那不是缺陷，那是這張卡唯一可以照做的東西。其餘都是歷史。
+ * 二、**這張卡只講歷史。** 「明日開盤將執行」已經拆到 `SimNext.tsx`，
+ *     放在決策條正下方——量出來它原本在手機上位於 y=1604，視窗只有 780px，
+ *     要捲兩個螢幕才看得到，而那是整頁唯一可以照做的指令。
  */
 
 const LABEL: Record<SimTrack['track'], string> = {
@@ -25,16 +25,6 @@ const money = (v: number, currency: string) =>
   currency === 'TWD'
     ? Math.round(v).toLocaleString('en-US')
     : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-function pendingText(p: NonNullable<SimTrack['pending']>): string {
-  const why = p.triggers.includes('stop') ? '跌破止跌'
-    : p.triggers.includes('sell_zone') ? '觸及賣出區'
-    : p.triggers.includes('add') ? '回到加碼區'
-    : p.triggers.join('、')
-  if (p.buy && p.sell) return `買賣相抵後的淨額（${why}）`
-  if (p.sell) return `賣出${p.triggers.includes('stop') ? '全部' : '一半'}持股（${why}）`
-  return `買進一批（${why}）`
-}
 
 export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' | 'US' }) {
   if (tracks.length === 0) return null
@@ -66,18 +56,8 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
         <span className="fine tnum">本金 {money(lead.initialTwd, 'TWD')} 元／{LABEL[lead.track]}</span>
       </div>
 
-      {lead.pending ? (
-        <p className="simnext" data-testid="sim-pending">
-          <Icon name="chevronUp" />
-          <b>明日開盤將執行</b>
-          <span>{pendingText(lead.pending)}</span>
-        </p>
-      ) : (
-        <p className="simnext quiet" data-testid="sim-pending">
-          <b>明日開盤</b><span>不動作</span>
-        </p>
-      )}
-
+      {/* 「明日開盤將執行」不在這張卡裡——它被移到決策條下方（SimNext.tsx）。
+          這張卡是回顧，那一行是指令，兩種閱讀狀態不要混在一起。 */}
       <div className="simscores">
         <div className="simscore lead">
           <div className="lab">{LABEL[lead.track]}</div>

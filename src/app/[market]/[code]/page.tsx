@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getStockPage, getSim } from '@/lib/data'
-import { PriceChart, KdChart } from '@/components/Charts'
+import { PriceChart, KdChart, W_NARROW } from '@/components/Charts'
 import { NavLink } from '@/components/NavLink'
 import { LevelStrip, type StripLevel } from '@/components/LevelStrip'
 import { levelStatus } from '@/lib/status'
@@ -8,6 +8,7 @@ import { Icon } from '@/components/Icon'
 import { TopBar } from '@/components/TopBar'
 import { ValuationCard } from '@/components/ValuationCard'
 import { SimCard } from '@/components/SimCard'
+import { SimNext } from '@/components/SimNext'
 import { kd as computeKd } from '@/lib/indicators'
 
 export const dynamic = 'force-dynamic'
@@ -129,6 +130,10 @@ export default async function StockPage({
 
       <LevelStrip levels={strip} close={close} />
 
+      {/* 決策條說「哪些價位有意義」，這一行說「所以明天開盤做什麼」——
+          兩句話是連著的。原本它在手機上位於第三屏（y=1604，視窗 780）。 */}
+      <SimNext track={simLead} />
+
       <section className="tiles">
         <div className="tile">
           <div className="lab">收盤價</div>
@@ -182,25 +187,37 @@ export default async function StockPage({
       <ValuationCard valuation={page.valuation} market={page.symbol.market}
         code={page.symbol.code} />
 
+{/* 兩種 viewBox 寬度各渲染一份，用 CSS 切換。
+          920 寬的 viewBox 塞進 375px 螢幕，軸標籤實測只剩 3.6px——
+          那不是小，是看不見。伺服器端就決定好，不需要 JS 量視窗。 */}
       <section className="card">
         <h2>近 6 個月收盤價與布林通道</h2>
-        <PriceChart
-          bars={page.bars}
-          bands={page.bands}
-          levels={{
-            sell: levels.sell ? [levels.sell.lo, levels.sell.hi] : null,
-            stop: levels.stop?.price ?? null,
-            add: levels.add ? [levels.add.lo, levels.add.hi] : null,
-          }}
-          currency={cur}
-          history={page.levelHistory}
-          marks={simLead?.marks ?? []}
-        />
+        {[undefined, W_NARROW].map((w) => (
+          <div key={w ?? 'wide'} className={w ? 'chart-narrow' : 'chart-wide'}>
+            <PriceChart
+              bars={page.bars}
+              bands={page.bands}
+              levels={{
+                sell: levels.sell ? [levels.sell.lo, levels.sell.hi] : null,
+                stop: levels.stop?.price ?? null,
+                add: levels.add ? [levels.add.lo, levels.add.hi] : null,
+              }}
+              currency={cur}
+              history={page.levelHistory}
+              marks={simLead?.marks ?? []}
+              width={w}
+            />
+          </div>
+        ))}
       </section>
 
       <section className="card">
         <h2>KD 指標（9,3,3）</h2>
-        <KdChart points={kdPoints} />
+        {[undefined, W_NARROW].map((w) => (
+          <div key={w ?? 'wide'} className={w ? 'chart-narrow' : 'chart-wide'}>
+            <KdChart points={kdPoints} width={w} />
+          </div>
+        ))}
       </section>
     </main>
   )
