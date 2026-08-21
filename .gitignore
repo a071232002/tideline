@@ -49,3 +49,4 @@ supabase/functions/
 
 # 排程產生的 log
 /logs/
+.shots/
