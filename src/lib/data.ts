@@ -237,3 +237,86 @@ export const getStockPage = unstable_cache(
 export function invalidateAnalysis(): void {
   revalidateTag(TAGS.analysis)
 }
+
+/**
+ * 模擬帳戶（PLAN §13.7）。走使用者身分——帳戶是 per-user 的，
+ * 所以**不能**放進 `getStockPage` 那個全站共用的快取裡。
+ */
+export interface SimTrack {
+  track: 'rule' | 'ai' | 'hold'
+  initialTwd: number
+  initialCash: number
+  currency: string
+  retPct: number
+  equity: number
+  cash: number
+  shares: number
+  daysInMarket: number
+  totalDays: number
+  totalFees: number
+  trades: number
+  curve: { d: string; retPct: number }[]
+  recent: {
+    signalD: string; fillD: string; side: 'buy' | 'sell'
+    qty: number; price: number; fee: number; tax: number; triggers: string[]
+  }[]
+  marks: { d: string; side: 'buy' | 'sell'; price: number; stop: boolean }[]
+  /** 明天開盤要做的事。這是整張卡最重要的一行——一句可以照做的指令 */
+  pending: { signalD: string; buy: boolean; sell: boolean; triggers: string[] } | null
+}
+
+export async function getSim(symbolId: string): Promise<SimTrack[]> {
+  const supabase = await createClient()
+  const { data: accounts } = await supabase
+    .from('sim_accounts')
+    .select('id, track, initial_twd, initial_cash, currency, pending')
+    .eq('symbol_id', symbolId)
+  if (!accounts || accounts.length === 0) return []
+
+  const out: SimTrack[] = []
+  for (const acc of accounts) {
+    const id = acc.id as string
+    const { data: eq } = await supabase
+      .from('sim_equity').select('d, cash, shares, equity, ret_pct')
+      .eq('account_id', id).order('d', { ascending: true })
+    const { data: tr } = await supabase
+      .from('sim_trades')
+      .select('signal_d, fill_d, side, qty, price, fee, tax, triggers')
+      .eq('account_id', id).order('signal_d', { ascending: true })
+
+    const curve = (eq ?? []).map((e) => ({ d: e.d as string, retPct: Number(e.ret_pct) }))
+    const last = (eq ?? [])[eq!.length - 1]
+    const trades = tr ?? []
+
+    out.push({
+      track: acc.track as SimTrack['track'],
+      initialTwd: Number(acc.initial_twd),
+      initialCash: Number(acc.initial_cash),
+      currency: acc.currency as string,
+      retPct: last ? Number(last.ret_pct) : 0,
+      equity: last ? Number(last.equity) : Number(acc.initial_cash),
+      cash: last ? Number(last.cash) : Number(acc.initial_cash),
+      shares: last ? Number(last.shares) : 0,
+      daysInMarket: (eq ?? []).filter((e) => Number(e.shares) > 0).length,
+      totalDays: (eq ?? []).length,
+      totalFees: trades.reduce((s, t) => s + Number(t.fee) + Number(t.tax), 0),
+      trades: trades.length,
+      curve,
+      recent: trades.slice(-3).reverse().map((t) => ({
+        signalD: t.signal_d as string, fillD: t.fill_d as string,
+        side: t.side as 'buy' | 'sell',
+        qty: Number(t.qty), price: Number(t.price),
+        fee: Number(t.fee), tax: Number(t.tax),
+        triggers: (t.triggers as string[]) ?? [],
+      })),
+      marks: trades.map((t) => ({
+        d: t.fill_d as string,
+        side: t.side as 'buy' | 'sell',
+        price: Number(t.price),
+        stop: ((t.triggers as string[]) ?? []).includes('stop'),
+      })),
+      pending: (acc.pending as SimTrack['pending']) ?? null,
+    })
+  }
+  return out
+}

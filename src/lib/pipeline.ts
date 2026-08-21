@@ -7,6 +7,7 @@ import { checkBars, checkAnalysis, type Issue } from './sanity'
 import { fetchTwseValuation, fetchYahooValuation } from './sources/valuation'
 import { fetchUsdTwd, FX_PAIR, plausible } from './sources/fx'
 import { adjustBars, type Dividends, type Splits } from './adjust'
+import { rebuildAll } from './sim/run'
 import type { Bar } from './types'
 import type { Market } from './levels'
 
@@ -245,6 +246,16 @@ export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
     results.push(await ingestSymbol(s))
   }
 
+  // 模擬帳戶：價格更新完才重建，否則今天的訊號還進不到帳戶裡（PLAN §13）。
+  // 失敗不影響數字管線——帳戶是加分項，價位與圖表不能因為它掛掉就不見。
+  let simNote: string | null = null
+  try {
+    const { data: users } = await db.auth.admin.listUsers()
+    for (const u of users?.users ?? []) await rebuildAll(u.id)
+  } catch (e) {
+    simNote = `模擬帳戶重建失敗：${e instanceof Error ? e.message : String(e)}`
+  }
+
   const failed = results.filter((r) => !r.ok)
   const flagged = results.flatMap((r) => r.issues ?? [])
   if (runId !== undefined) {
@@ -258,6 +269,7 @@ export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
         ...failed.map((f) => `${f.code}: ${f.error}`),
         ...flagged.map((i) => `⚠ ${i.code} ${i.date ?? ''} [${i.kind}] ${i.detail}`),
         ...(fxNote ? [`⚠ ${fxNote}`] : []),
+        ...(simNote ? [`⚠ ${simNote}`] : []),
       ].join('; ') || null,
     }).eq('id', runId)
   }

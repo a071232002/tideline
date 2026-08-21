@@ -238,6 +238,9 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
       )
 
       await writeTrack(accountId, result, originByDate)
+      await db.from('sim_accounts')
+        .update({ pending: pendingJson(result) })
+        .eq('id', accountId)
 
       const last = result.equity[result.equity.length - 1]
       out.push({
@@ -256,6 +259,27 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
 
 function describePending(triggers: string[]): string {
   return triggers.join('+')
+}
+
+/**
+ * 「明天開盤將執行」。最後一天的訊號還沒成交——那不是缺陷，
+ * 那是整張帳戶卡最重要的一行：一句可以在真實世界照做的指令（§13.1 一）。
+ *
+ * 只記方向與觸發原因，不記股數：股數要用明天的開盤價才算得出來，
+ * 今天先寫一個數字進去就是在編造一個不存在的成交。
+ */
+function pendingJson(r: SimResult): Record<string, unknown> | null {
+  if (!r.pending) return null
+  const o = r.pending.order
+  const buy = (o.buyCash ?? 0) > 0
+  const sell = (o.sellFraction ?? 0) > 0
+  if (!buy && !sell) return null
+  return {
+    signalD: r.pending.signalD,
+    buy, sell,
+    sellFraction: o.sellFraction ?? null,
+    triggers: o.triggers,
+  }
 }
 
 async function ensureAccount(

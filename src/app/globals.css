@@ -703,3 +703,75 @@ a { color: inherit; }
   padding-top: 9px;
   border-top: 1px solid var(--line);
 }
+
+/* ---------------------------------------------------------------- 模擬帳戶
+ *
+ * 這張卡的排序就是它的論點：**明日動作 → 三個報酬率 → 其餘全是註腳**。
+ *
+ * 三個報酬率同一個字級，不是主副關係。大盤漲 10% 而你賺 4% 不是準是拖後腿，
+ * 把買進持有縮小成註腳，等於幫使用者把自己騙過去。
+ */
+.sim .simhead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.sim .simhead h2 { margin: 0; }
+.sim .simhead .fine { margin: 0; }
+
+/* 唯一可以照做的一行，所以是唯一有底色的一行 */
+.simnext {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 12px 0 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-left: 3px solid var(--blue);
+  border-radius: 8px; background: var(--bg);
+  font-size: var(--t-body);
+}
+.simnext b { font-size: var(--t-label); color: var(--muted); font-weight: 700; }
+.simnext span { color: var(--ink); font-weight: 600; }
+.simnext svg { width: 16px; height: 16px; color: var(--blue); flex: 0 0 auto; }
+.simnext.quiet { border-left-color: var(--line); }
+.simnext.quiet svg { display: none; }
+
+.simscores {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px; margin: 14px 0 0;
+}
+.simscore .lab { font-size: var(--t-label); color: var(--muted); }
+.simscore .num { font-size: var(--n-md); font-weight: 800; margin-top: 2px; }
+/* 「超額」那一格才是「準不準」的答案，用左邊那條線把它跟前兩格分開 */
+.simscores .simscore:last-child {
+  border-left: 1px solid var(--line); padding-left: 10px;
+}
+
+.simwhy {
+  font-size: var(--t-body); color: var(--ink2);
+  margin: 10px 0 0; line-height: var(--lh-normal);
+}
+
+.simstats {
+  display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 12px 0 0;
+  font-size: var(--t-micro);
+}
+.simstats > div { display: flex; gap: 6px; }
+.simstats dt { color: var(--muted); }
+.simstats dd { margin: 0; color: var(--ink); font-weight: 600; }
+
+.simtrades { margin: 12px 0 0; border-collapse: collapse; font-size: var(--t-micro); }
+.simtrades td { padding: 3px 12px 3px 0; }
+.simtrades .quiet { color: var(--faint); }
+
+.simwarn {
+  margin: 12px 0 0; padding: 10px 12px;
+  border: 1px solid var(--stop); border-radius: 8px;
+  font-size: var(--t-micro); color: var(--ink2); line-height: var(--lh-normal);
+}
+
+@media (max-width: 480px) {
+  /* 三欄在 375px 會把 +41.66% 擠到換行。改成兩欄，超額獨佔一列——
+     它本來就是結論，佔一整列反而更清楚 */
+  .simscores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .simscores .simscore:last-child {
+    grid-column: 1 / -1; border-left: 0; padding-left: 0;
+    border-top: 1px solid var(--line); padding-top: 8px;
+  }
+}

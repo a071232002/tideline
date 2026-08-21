@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { getStockPage } from '@/lib/data'
+import { getStockPage, getSim } from '@/lib/data'
 import { PriceChart, KdChart } from '@/components/Charts'
 import { NavLink } from '@/components/NavLink'
 import { LevelStrip, type StripLevel } from '@/components/LevelStrip'
@@ -7,6 +7,7 @@ import { levelStatus } from '@/lib/status'
 import { Icon } from '@/components/Icon'
 import { TopBar } from '@/components/TopBar'
 import { ValuationCard } from '@/components/ValuationCard'
+import { SimCard } from '@/components/SimCard'
 import { kd as computeKd } from '@/lib/indicators'
 
 export const dynamic = 'force-dynamic'
@@ -33,6 +34,11 @@ export default async function StockPage({
   const { market, code } = await params
   const page = await getStockPage(market.toUpperCase(), code.toUpperCase())
   if (!page) notFound()
+
+  // 模擬帳戶是 per-user 的，所以在共用快取之外單獨讀（PLAN §13.7）
+  const sim = await getSim(page.symbol.id)
+  const simLead = sim.find((t) => t.track === 'ai' && t.trades > 0)
+    ?? sim.find((t) => t.track === 'rule')
 
   const a = page.analysis
   const cur = page.symbol.currency
@@ -171,6 +177,8 @@ export default async function StockPage({
         </p>
       </section>
 
+      <SimCard tracks={sim} market={page.symbol.market} />
+
       <ValuationCard valuation={page.valuation} market={page.symbol.market}
         code={page.symbol.code} />
 
@@ -186,6 +194,7 @@ export default async function StockPage({
           }}
           currency={cur}
           history={page.levelHistory}
+          marks={simLead?.marks ?? []}
         />
       </section>
 

@@ -19,6 +19,13 @@ export interface LevelHistoryPoint {
   origin: string
 }
 interface Band { d: string; mid: number; up: number; lo: number }
+/** 模擬帳戶的成交點。畫在圖上比任何統計數字都有說服力（PLAN §13.7） */
+export interface TradeMark {
+  d: string
+  side: 'buy' | 'sell'
+  price: number
+  stop: boolean
+}
 
 function niceTicks(min: number, max: number, count = 5): number[] {
   const span = max - min
@@ -33,7 +40,7 @@ function niceTicks(min: number, max: number, count = 5): number[] {
 
 /** 圖一：收盤價＋布林通道＋三條水平價位線 */
 export function PriceChart({
-  bars, bands, levels, currency, history,
+  bars, bands, levels, currency, history, marks,
 }: {
   bars: Pt[]
   bands: Band[]
@@ -41,6 +48,8 @@ export function PriceChart({
   currency: string
   /** 當時每天說的價位。給了就疊上去，回顧才看得出建議準不準。 */
   history?: LevelHistoryPoint[]
+  /** 模擬帳戶的成交點。一眼就看得出是「低接高出」還是「追高殺低」。 */
+  marks?: TradeMark[]
 }) {
   const H = 380
   const PH = H - MT - 26
@@ -178,6 +187,26 @@ export function PriceChart({
               )
             })
         })()}
+        {/* 模擬帳戶的成交點。買綠三角朝上、賣紅三角朝下、止損橘色。
+            這比任何統計數字都有說服力——低接高出還是追高殺低，用看的就知道。 */}
+        {(marks ?? []).map((m, n) => {
+          const i = idxByDate.get(m.d)
+          if (i === undefined) return null
+          const px = x(i)
+          const py = y(m.price)
+          const varName = m.stop ? 'stop' : m.side === 'buy' ? 'buy' : 'sell'
+          // 買點畫在價格下方朝上、賣點畫在上方朝下——不要蓋住收盤價那條線
+          const tri = m.side === 'buy'
+            ? `${px},${py + 5} ${px - 4.5},${py + 12} ${px + 4.5},${py + 12}`
+            : `${px},${py - 5} ${px - 4.5},${py - 12} ${px + 4.5},${py - 12}`
+          return (
+            <polygon key={`${m.d}-${m.side}-${n}`} points={tri}
+              style={{ fill: `var(--${varName})`, opacity: .9 }}>
+              <title>{`${m.d} ${m.side === 'buy' ? '買進' : m.stop ? '止損賣出' : '賣出'} @ ${m.price.toFixed(2)}`}</title>
+            </polygon>
+          )
+        })}
+
         {/* 今天在哪：端點圓點＋收盤價標籤 */}
         <circle cx={x(lastI)} cy={y(lastC)} r={4} className="hoverdot"
           style={{ fill: 'var(--blue)' }} />
@@ -199,6 +228,9 @@ export function PriceChart({
         <span><i className="sw dash" style={{ borderColor: 'var(--sell)' }} />賣出</span>
         <span><i className="sw dash" style={{ borderColor: 'var(--stop)' }} />止跌</span>
         <span><i className="sw dash" style={{ borderColor: 'var(--buy)' }} />加碼</span>
+        {(marks ?? []).length > 0 && (
+          <span><i className="sw" style={{ borderColor: 'var(--buy)' }} />▲買／▼賣（模擬帳戶）</span>
+        )}
         {histPaths.length > 0 && (
           <span style={{ color: 'var(--muted)' }}>
             階梯線＝<b>當時每天說的價位</b>（回頭看準不準）
