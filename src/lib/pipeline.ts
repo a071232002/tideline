@@ -5,6 +5,8 @@ import { analyze } from './analyze'
 import { RULES_VERSION } from './backfill'
 import { checkBars, checkAnalysis, type Issue } from './sanity'
 import { fetchTwseValuation, fetchYahooValuation } from './sources/valuation'
+import { fetchUsdTwd, FX_PAIR, plausible } from './sources/fx'
+import { adjustBars, type Dividends, type Splits } from './adjust'
 import type { Bar } from './types'
 import type { Market } from './levels'
 
@@ -36,6 +38,16 @@ export interface IngestResult {
   issues?: Issue[]
 }
 
+export interface FetchResult {
+  bars: Bar[]
+  name: string | null
+  currency: string
+  /** 除息日 → 每股配息。台股要另外跟 Yahoo 要，TWSE 不回這個 */
+  dividends: Dividends
+  /** 分割日 → 1 股變幾股 */
+  splits: Splits
+}
+
 /**
  * 台股走 TWSE、美股走 Yahoo（PLAN §2）。
  *
@@ -47,17 +59,32 @@ export async function fetchBars(
   market: Market,
   code: string,
   yahooSymbol: string,
-): Promise<{ bars: Bar[]; name: string | null; currency: string }> {
+): Promise<FetchResult> {
   if (process.env.TIDELINE_FIXTURE === '1') {
     const { fixtureBars } = await import('./sources/fixture')
-    return fixtureBars(market, code)
+    const f = await fixtureBars(market, code)
+    return { ...f, dividends: {}, splits: {} }
   }
   if (market === 'TW') {
     const bars = await fetchTwseDailyBars(code, 9)
-    return { bars, name: null, currency: 'TWD' }
+    // 價格用 TWSE（權威），事件只能用 Yahoo。事件抓不到就當作沒有——
+    // 少一次配息會讓帳戶少收一點現金，但擋住整檔的抓取更糟。
+    let dividends: Dividends = {}
+    let splits: Splits = {}
+    try {
+      const y = await fetchYahooDailyBars(yahooSymbol, '1y')
+      dividends = y.dividends
+      splits = y.splits
+    } catch {
+      // 上層會從 issues 看到「沒有事件資料」
+    }
+    return { bars, name: null, currency: 'TWD', dividends, splits }
   }
   const r = await fetchYahooDailyBars(yahooSymbol, '1y')
-  return { bars: r.bars, name: r.name, currency: r.currency }
+  return {
+    bars: r.bars, name: r.name, currency: r.currency,
+    dividends: r.dividends, splits: r.splits,
+  }
 }
 
 /**
@@ -69,7 +96,8 @@ export async function fetchBars(
 export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
   const db = createAdminClient()
   try {
-    const { bars, name, currency } = await fetchBars(sym.market, sym.code, sym.yahoo_symbol)
+    const { bars, name, currency, dividends, splits } =
+      await fetchBars(sym.market, sym.code, sym.yahoo_symbol)
     if (bars.length === 0) throw new Error('來源沒有回傳任何 K 棒')
 
     const kept = bars.slice(-KEEP_BARS)
@@ -83,15 +111,35 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
       await db.from('symbols').update({ name_en: name }).eq('id', sym.id)
     }
 
-    const rows = kept.map((b) => ({
+    // 還原價：除息日之前的價格回溯打折，讓那道跳空消失（PLAN §13.3）。
+    // 之前這四個欄位是原始價的複本、adj_factor 恆為 1——那是資料庫裡的一句謊話。
+    // 指標與模擬帳戶都走原始價，這裡存的是**另一套**，供日後比對與偵測分割。
+    const adjusted = adjustBars(kept, dividends, splits)
+
+    const rows = adjusted.map((b) => ({
       symbol_id: sym.id, d: b.date,
       o: b.o, h: b.h, l: b.l, c: b.c, v: b.v,
-      // 還原價目前與原始價相同；除權息回溯改寫留待每月校正處理（PLAN §7）
-      o_adj: b.o, h_adj: b.h, l_adj: b.l, c_adj: b.c, adj_factor: 1,
+      o_adj: b.o_adj, h_adj: b.h_adj, l_adj: b.l_adj, c_adj: b.c_adj,
+      adj_factor: b.adj_factor,
       src: sym.market === 'TW' ? 'twse' : 'yahoo',
     }))
     const { error: barErr } = await db.from('daily_bars').upsert(rows)
     if (barErr) throw new Error(`寫入 daily_bars 失敗：${barErr.message}`)
+
+    // 公司行動：模擬帳戶用原始價成交，所以配息要發現金、分割要調股數（PLAN §13.3）。
+    // 只留視窗內的——視窗外的事件不會影響任何一筆模擬成交。
+    const first = kept[0]!.date
+    const actions = [
+      ...Object.entries(dividends).map(([d, amount]) => ({ d, kind: 'dividend', amount })),
+      ...Object.entries(splits).map(([d, amount]) => ({ d, kind: 'split', amount })),
+    ].filter((a) => a.d >= first && a.amount > 0)
+      .map((a) => ({
+        symbol_id: sym.id, d: a.d, kind: a.kind, amount: a.amount,
+        src: 'yahoo',
+      }))
+    if (actions.length > 0) {
+      await db.from('corporate_actions').upsert(actions)
+    }
 
     const a = analyze(kept, currency, sym.market)
     if (!a) throw new Error(`資料不足，只有 ${kept.length} 根 K 棒`)
@@ -153,12 +201,37 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
   }
 }
 
+/**
+ * 匯率：一輪抓一次，不是每檔抓一次（PLAN §13.2）。
+ *
+ * 抓不到不算失敗——`rateOn` 會沿用之前最後一筆。回傳訊息讓上層寫進 job_runs，
+ * 這樣「今天的美股淨值是用哪一天的匯率換的」是查得到的，不是猜的。
+ */
+async function ingestFx(): Promise<string | null> {
+  if (process.env.TIDELINE_FIXTURE === '1') return null
+  try {
+    const rates = await fetchUsdTwd('1mo')
+    const rows = Object.entries(rates)
+      .filter(([, r]) => plausible(r))
+      .map(([d, rate]) => ({ d, pair: FX_PAIR, rate, src: 'yahoo' }))
+    if (rows.length === 0) return '匯率：來源沒有回傳合理的數值，沿用舊值'
+    const db = createAdminClient()
+    const { error } = await db.from('fx_rates').upsert(rows)
+    if (error) return `匯率：寫入失敗 ${error.message}，沿用舊值`
+    return null
+  } catch (e) {
+    return `匯率：${e instanceof Error ? e.message : String(e)}，沿用舊值`
+  }
+}
+
 /** 跑一輪：所有被關注的標的。沒人關注的不抓（PLAN §7）。 */
 export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
   const db = createAdminClient()
 
   const { data: run } = await db.from('job_runs').insert({ job }).select('id').single()
   const runId = run?.id as number | undefined
+
+  const fxNote = await ingestFx()
 
   const { data: watched } = await db.from('watchlist').select('symbol_id')
   const ids = [...new Set((watched ?? []).map((w) => w.symbol_id as string))]
@@ -184,6 +257,7 @@ export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
       error: [
         ...failed.map((f) => `${f.code}: ${f.error}`),
         ...flagged.map((i) => `⚠ ${i.code} ${i.date ?? ''} [${i.kind}] ${i.detail}`),
+        ...(fxNote ? [`⚠ ${fxNote}`] : []),
       ].join('; ') || null,
     }).eq('id', runId)
   }
