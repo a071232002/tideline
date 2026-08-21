@@ -12,11 +12,27 @@ import type { RuleParams } from './params'
  *
  * §4 的加碼區本來就附帶兩個條件：「%b < 0.5，且建議等 K < 30 出現金叉再分批進場」。
  * 模擬的初稿把它們漏掉了，變成「碰到就買」——那會把一路下跌的過程買好買滿。
- * 四個條件是**且**，任何一個不成立就是不買，錢繼續放著。空手是合法的結果。
+ * 任何一個條件不成立就是不買，錢繼續放著。空手是合法的結果。
+ *
+ * ## 但「等金叉**再**進場」是先後，不是同一天
+ *
+ * 第二版初稿要求四個條件同日成立，實測台股三檔**半年一次都沒進場**
+ * （數據見 `params.ts` 的 2026-08-21.2）。一條永遠不觸發的規則不能當 AI 的對照組。
+ *
+ * 正確的讀法是三個先後事件：
+ *
+ *   1. **回低檔**　K 跌破 `addMaxK`（那一段回檔真的發生過）
+ *   2. **金叉**　　K 之後上穿 D → 訊號架起（armed）
+ *   3. **價格到位** 盤中最低進入加碼區且 %b < 0.5 → 才下單
+ *
+ * 第 1 與第 2 步不必同一天。上升趨勢裡 KD 的回檔又淺又快，等到金叉出現時 K 常常
+ * 已經回到 30 以上——要求同日成立的話，台股這半年**一次都不會進場**。
+ *
+ * 訊號在 K 進入高檔（`armResetK`）或止損時解除：那時這一段已經走完了。
  *
  * ## 這個函式是有狀態的
  *
- * 冷卻期要跨天記憶，所以回傳的 decider 帶著閉包狀態。
+ * armed 與冷卻期都要跨天記憶，所以回傳的 decider 帶著閉包狀態。
  * **每一次 `simulate` 都要重新呼叫 `ruleDecider()` 建一個新的**，
  * 重複使用同一個會把上一次模擬的冷卻狀態帶進來。
  */
@@ -41,6 +57,8 @@ export function ruleDecider(
 ): Decider {
   const batchSize = initialCash / p.batches
   let cooldownUntilIndex = -1
+  let dipped = false   // K 曾經回過低檔
+  let armed = false    // 回過低檔之後又出現金叉
 
   return (ctx) => {
     const day = days[ctx.bar.date]
@@ -51,10 +69,20 @@ export function ruleDecider(
     let sellFraction: number | undefined
     let buyCash: number | undefined
 
+    // 0. 先更新訊號狀態。回低檔與金叉是兩個先後事件，不必同一天。
+    const goldenCross = day.kPrev !== null && day.dPrev !== null
+      && day.kPrev <= day.dPrev && day.k > day.d
+    if (day.k < p.addMaxK) dipped = true
+    if (goldenCross && dipped) { armed = true; dipped = false }
+    // K 進高檔：這一段走完了，再用它進場是追高
+    if (day.k > p.armResetK) { armed = false; dipped = false }
+
     // 1. 止損：收盤跌破。跌破了就不是減碼的事，兩者互斥、止損優先
     const stop = day.levels.stop?.price
     if (stop !== undefined && state.shares > 0 && bar.c < stop) {
       cooldownUntilIndex = ctx.index + p.cooldownDays
+      armed = false
+      dipped = false
       return { sellFraction: 1, triggers: ['stop'], decidedBy: 'rule' }
     }
 
@@ -65,18 +93,15 @@ export function ruleDecider(
       triggers.push('sell_zone')
     }
 
-    // 3. 加碼：四個條件缺一不可
+    // 3. 加碼：訊號要先架起來，價格與 %b 要到位，批次要有額度，且不在冷卻中
     const cooling = ctx.index <= cooldownUntilIndex
-    const goldenCross = day.kPrev !== null && day.dPrev !== null
-      && day.kPrev <= day.dPrev && day.k > day.d
     const roomForBatch = state.cost + batchSize <= initialCash + 1e-9
 
     if (
       !cooling
+      && armed
       && bar.l <= day.levels.add.hi
       && day.pctB < p.addMaxPctB
-      && day.k < p.addMaxK
-      && goldenCross
       && roomForBatch
       && state.cash > 0
     ) {

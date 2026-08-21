@@ -1,0 +1,325 @@
+import { createAdminClient } from '../supabase/admin'
+import { simulate, type Decider, type CorporateAction, type SimResult } from './engine'
+import { ruleDecider, holdDecider, type RuleDay } from './rules'
+import { DEFAULT_CAPITAL_TWD, DEFAULT_FEES, DEFAULT_RULES, PARAMS_VERSION } from './params'
+import { rateOn, FX_PAIR, type FxRates } from '../sources/fx'
+import { RULES_VERSION } from '../backfill'
+import type { Bar } from '../types'
+import type { Market } from '../levels'
+
+/**
+ * 把模擬帳戶接上資料庫（PLAN §13.6）。
+ *
+ * ## 什麼是真相，什麼是推導出來的
+ *
+ * | 表 | 地位 |
+ * |---|---|
+ * | `daily_analysis` | 真相。當天說了什麼 |
+ * | `sim_ai_log` | 真相。當天 AI 決定做什麼。**永不重算、永不回補** |
+ * | `sim_trades` / `sim_equity` | **推導**。由上面兩者加上 K 棒算出來 |
+ *
+ * 所以三條軌道都可以整條重建，重建不會失真——決策的紀錄沒有被動到，
+ * 動的只是「照這些決策會變成什麼樣」。這也讓費率參數改動之後可以整批重跑。
+ *
+ * AI 那條的 decider 是**重播**紀錄，不是重新問模型。事後再問一次模型，
+ * 它知道後來發生了什麼，那條曲線一定漂亮也一定沒有意義（§13.1 四）。
+ */
+
+export type Track = 'rule' | 'ai' | 'hold'
+export const TRACKS: Track[] = ['rule', 'ai', 'hold']
+
+export interface SymbolMeta {
+  id: string
+  code: string
+  market: Market
+  currency: string
+  isEtf: boolean
+}
+
+interface AnalysisRow {
+  d: string
+  levels: Record<string, unknown>
+  pct_b: number | null
+  k: number | null
+  d_val: number | null
+  origin: string
+}
+
+/** 把 daily_analysis 轉成規則軌道看得懂的每日輸入。KD 的前一日值要自己接起來 */
+export function toRuleDays(rows: readonly AnalysisRow[]): Record<string, RuleDay> {
+  const out: Record<string, RuleDay> = {}
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]!
+    const lv = r.levels as {
+      add?: { lo: number; hi: number }
+      sell?: { lo: number; hi: number } | null
+      stop?: { price: number } | null
+    }
+    // 加碼區是規則的核心，沒有它這一天就沒有可用的決策輸入
+    if (!lv?.add || r.pct_b === null || r.k === null || r.d_val === null) continue
+    const prev = rows[i - 1]
+    out[r.d] = {
+      levels: { add: lv.add, sell: lv.sell ?? null, stop: lv.stop ?? null },
+      pctB: Number(r.pct_b),
+      k: Number(r.k),
+      d: Number(r.d_val),
+      kPrev: prev?.k === null || prev?.k === undefined ? null : Number(prev.k),
+      dPrev: prev?.d_val === null || prev?.d_val === undefined ? null : Number(prev.d_val),
+    }
+  }
+  return out
+}
+
+interface AiLogRow {
+  d: string
+  status: string
+  action: string | null
+  confidence: string | null
+  reason: string | null
+}
+
+/**
+ * AI 軌道的 decider：**重播**當天記下來的決定。
+ *
+ * 動作是固定選項不是自由輸入——`buy_50` 代表「用掉一半現金」，
+ * 實際股數由引擎按成交價算。AI 沒有欄位可以填數字，所以沒有機會編數字（§13.5）。
+ */
+export function aiDecider(logs: readonly AiLogRow[]): Decider {
+  const byDate = new Map(logs.filter((l) => l.status === 'ok').map((l) => [l.d, l]))
+  return (ctx) => {
+    const l = byDate.get(ctx.bar.date)
+    if (!l?.action || l.action === 'hold') return null
+
+    const m = /^(buy|sell)_(25|50|100)$/.exec(l.action)
+    if (!m) return null
+    const pct = Number(m[2]) / 100
+    const common = {
+      triggers: [`ai:${l.action}`],
+      decidedBy: 'ai' as const,
+      confidence: l.confidence ?? undefined,
+      reason: l.reason ?? undefined,
+    }
+    return m[1] === 'buy'
+      ? { ...common, buyCash: ctx.state.cash * pct }
+      : { ...common, sellFraction: pct }
+  }
+}
+
+export function deciderFor(
+  track: Track,
+  days: Record<string, RuleDay>,
+  logs: readonly AiLogRow[],
+  initialCash: number,
+): Decider {
+  if (track === 'hold') return holdDecider()
+  if (track === 'ai') return aiDecider(logs)
+  return ruleDecider(days, initialCash, DEFAULT_RULES)
+}
+
+/** 本金換算。美股帳內用美元記帳，本金是「建帳當日以匯率換算的 5 萬台幣」 */
+export function initialCashFor(
+  market: Market, capitalTwd: number, fx: number | null,
+): { cash: number; fx: number | null } {
+  if (market === 'TW') return { cash: capitalTwd, fx: null }
+  // 匯率查不到就不能開美股帳戶——用一個猜的匯率開帳，之後每一天的台幣淨值都是錯的
+  if (fx === null || !(fx > 0)) return { cash: 0, fx: null }
+  return { cash: capitalTwd / fx, fx }
+}
+
+async function loadFx(): Promise<FxRates> {
+  const db = createAdminClient()
+  const { data } = await db.from('fx_rates').select('d, rate').eq('pair', FX_PAIR)
+  const out: FxRates = {}
+  for (const r of data ?? []) out[r.d as string] = Number(r.rate)
+  return out
+}
+
+export interface RebuildResult {
+  code: string
+  track: Track
+  trades: number
+  retPct: number
+  daysInMarket: number
+  totalFees: number
+  pending: string | null
+  skipped?: string
+}
+
+/**
+ * 重建一位使用者的所有模擬帳戶。
+ *
+ * 帳戶不存在就建立——加入觀察清單時就該建好，但既有的標的是在這個功能之前
+ * 加進去的，所以這裡補建。`started_on` 用**有分析資料的第一天**，
+ * 三條軌道一致，否則報酬率不能並排比較。
+ */
+export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TWD)
+  : Promise<RebuildResult[]> {
+  const db = createAdminClient()
+  const fx = await loadFx()
+
+  const { data: watched } = await db.from('watchlist')
+    .select('symbol_id').eq('user_id', userId)
+  const ids = [...new Set((watched ?? []).map((w) => w.symbol_id as string))]
+  if (ids.length === 0) return []
+
+  const { data: syms } = await db.from('symbols')
+    .select('id, code, market, currency, is_etf').in('id', ids)
+
+  const out: RebuildResult[] = []
+
+  for (const s of syms ?? []) {
+    const sym: SymbolMeta = {
+      id: s.id as string, code: s.code as string, market: s.market as Market,
+      currency: s.currency as string, isEtf: Boolean(s.is_etf),
+    }
+
+    const { data: barRows } = await db.from('daily_bars')
+      .select('d, o, h, l, c, v').eq('symbol_id', sym.id).order('d', { ascending: true })
+    const { data: anRows } = await db.from('daily_analysis')
+      .select('d, levels, pct_b, k, d_val, origin')
+      .eq('symbol_id', sym.id).order('d', { ascending: true })
+    const { data: actRows } = await db.from('corporate_actions')
+      .select('d, kind, amount').eq('symbol_id', sym.id)
+
+    const analyses = (anRows ?? []) as unknown as AnalysisRow[]
+    if (analyses.length === 0) {
+      for (const t of TRACKS) {
+        out.push({ code: sym.code, track: t, trades: 0, retPct: 0, daysInMarket: 0,
+          totalFees: 0, pending: null, skipped: '沒有分析資料' })
+      }
+      continue
+    }
+
+    // 只從「有分析可用」的那一天開始，三條軌道一致。
+    // 買進持有若從更早開始，它會憑空多賺一段暖機期的漲幅，對照就失去意義。
+    const startedOn = analyses[0]!.d
+    const bars: Bar[] = (barRows ?? [])
+      .filter((b) => (b.d as string) >= startedOn)
+      .map((b) => ({
+        date: b.d as string, o: Number(b.o), h: Number(b.h),
+        l: Number(b.l), c: Number(b.c), v: Number(b.v ?? 0),
+      }))
+    if (bars.length === 0) continue
+
+    const actions: CorporateAction[] = (actRows ?? []).map((a) => ({
+      date: a.d as string,
+      kind: a.kind as 'dividend' | 'split',
+      amount: Number(a.amount),
+    }))
+
+    const days = toRuleDays(analyses)
+    const originByDate = new Map(analyses.map((a) => [a.d, a.origin]))
+
+    const { cash: initialCash, fx: fxAtOpen } =
+      initialCashFor(sym.market, capitalTwd, rateOn(fx, startedOn))
+    if (initialCash <= 0) {
+      for (const t of TRACKS) {
+        out.push({ code: sym.code, track: t, trades: 0, retPct: 0, daysInMarket: 0,
+          totalFees: 0, pending: null, skipped: '沒有匯率，美股帳戶無法開帳' })
+      }
+      continue
+    }
+
+    for (const track of TRACKS) {
+      const accountId = await ensureAccount(userId, sym, track, {
+        capitalTwd, initialCash, fxAtOpen, startedOn,
+      })
+
+      const { data: logs } = track === 'ai'
+        ? await db.from('sim_ai_log')
+          .select('d, status, action, confidence, reason')
+          .eq('account_id', accountId).order('d', { ascending: true })
+        : { data: [] }
+
+      const result = simulate(
+        bars,
+        deciderFor(track, days, (logs ?? []) as unknown as AiLogRow[], initialCash),
+        { market: sym.market, isEtf: sym.isEtf, initialCash, fees: DEFAULT_FEES, actions },
+      )
+
+      await writeTrack(accountId, result, originByDate)
+
+      const last = result.equity[result.equity.length - 1]
+      out.push({
+        code: sym.code, track,
+        trades: result.trades.length,
+        retPct: last?.retPct ?? 0,
+        daysInMarket: result.daysInMarket,
+        totalFees: result.totalFees,
+        pending: result.pending ? describePending(result.pending.order.triggers) : null,
+      })
+    }
+  }
+
+  return out
+}
+
+function describePending(triggers: string[]): string {
+  return triggers.join('+')
+}
+
+async function ensureAccount(
+  userId: string, sym: SymbolMeta, track: Track,
+  o: { capitalTwd: number; initialCash: number; fxAtOpen: number | null; startedOn: string },
+): Promise<string> {
+  const db = createAdminClient()
+  const { data: existing } = await db.from('sim_accounts')
+    .select('id').eq('user_id', userId).eq('symbol_id', sym.id).eq('track', track)
+    .maybeSingle()
+  if (existing) return existing.id as string
+
+  const { data, error } = await db.from('sim_accounts').insert({
+    user_id: userId, symbol_id: sym.id, track,
+    initial_twd: o.capitalTwd, initial_cash: o.initialCash,
+    currency: sym.currency, fx_at_open: o.fxAtOpen,
+    params: { fees: DEFAULT_FEES, rules: DEFAULT_RULES, version: PARAMS_VERSION },
+    started_on: o.startedOn,
+  }).select('id').single()
+  if (error) throw new Error(`建立模擬帳戶失敗（${sym.code}/${track}）：${error.message}`)
+  return data.id as string
+}
+
+/**
+ * 成交與淨值是推導出來的，所以整條重寫。
+ *
+ * 先刪再寫而不是 upsert：規則或費率改了之後，舊的成交筆數可能**變少**，
+ * upsert 不會移除已經不該存在的那幾筆——那正是 `daily_bars` 踩過的坑
+ * （盤中半根修好之後仍然躺在資料庫裡）。
+ */
+async function writeTrack(
+  accountId: string, r: SimResult, originByDate: Map<string, string>,
+): Promise<void> {
+  const db = createAdminClient()
+  await db.from('sim_trades').delete().eq('account_id', accountId)
+  await db.from('sim_equity').delete().eq('account_id', accountId)
+
+  if (r.trades.length > 0) {
+    const rows = r.trades.map((t) => ({
+      account_id: accountId,
+      signal_d: t.signalD, fill_d: t.fillD, side: t.side,
+      qty: t.qty, price: t.price, fee: t.fee, tax: t.tax,
+      triggers: t.triggers, decided_by: t.decidedBy,
+      confidence: t.confidence ?? null,
+      overrode_stop: t.overrodeStop,
+      reason: t.reason ?? null,
+      // AI 的決定是當天真的做的；規則的則跟著產生訊號那天的分析走
+      origin: t.decidedBy === 'ai' ? 'live' : (originByDate.get(t.signalD) ?? 'backfill'),
+      rules_version: RULES_VERSION,
+      params_version: PARAMS_VERSION,
+    }))
+    for (let i = 0; i < rows.length; i += 200) {
+      const { error } = await db.from('sim_trades').insert(rows.slice(i, i + 200))
+      if (error) throw new Error(`寫入 sim_trades 失敗：${error.message}`)
+    }
+  }
+
+  const eq = r.equity.map((e) => ({
+    account_id: accountId, d: e.d,
+    cash: e.cash, shares: e.shares, mark: e.mark,
+    equity: e.equity, ret_pct: e.retPct,
+  }))
+  for (let i = 0; i < eq.length; i += 500) {
+    const { error } = await db.from('sim_equity').insert(eq.slice(i, i + 500))
+    if (error) throw new Error(`寫入 sim_equity 失敗：${error.message}`)
+  }
+}

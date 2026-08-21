@@ -16,7 +16,9 @@
     "ingest": "tsx scripts/ingest.ts",
     "e2e:compose": "podman compose --env-file .env.e2e -f docker-compose.e2e.yml down --remove-orphans && podman compose --env-file .env.e2e -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e",
     "e2e:compose:down": "podman compose --env-file .env.e2e -f docker-compose.e2e.yml down --remove-orphans",
-    "backfill": "tsx scripts/backfill.ts"
+    "backfill": "tsx scripts/backfill.ts",
+    "fx": "tsx scripts/fx.ts",
+    "sim": "tsx scripts/sim-backfill.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

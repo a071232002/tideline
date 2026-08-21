@@ -191,6 +191,93 @@ describe('冷卻：止損後不要馬上被巴回來', () => {
   })
 })
 
+describe('金叉是「先架起訊號」，不是「同一天」（params 2026-08-21.2）', () => {
+  /**
+   * 初稿要求 %b<0.5、K<30、金叉、價格進區四者同日成立，實測台股三檔
+   * **半年一次都沒進場**——一條永遠不觸發的規則不能當 AI 的對照組。
+   * §4 的原文是「等 KD 回低檔出現金叉**再**分批進場」，「再」是先後。
+   */
+
+  /** 低檔金叉當天，但價格還沒回到加碼區 */
+  const crossDay = goodAdd()
+  /** 幾天後價格才回到加碼區，當天沒有金叉（K 仍在低檔且高於 D） */
+  const laterDip = goodAdd({ k: 28, d: 26, kPrev: 27, dPrev: 25 })
+
+  const bars = [
+    bar('2026-08-17', 100, 100, 110, 108),  // 金叉日，價格在高處
+    bar('2026-08-18', 100, 100, 110, 108),
+    bar('2026-08-19', 100, 100, 102, 100),  // 價格回到加碼區
+    bar('2026-08-20', 100, 100, 100, 100),
+  ]
+
+  it('金叉在前、價格在後 → 買得到', () => {
+    const r = run(bars, { '2026-08-17': crossDay, '2026-08-19': laterDip })
+    expect(r.trades).toHaveLength(1)
+    expect(r.trades[0]!.side).toBe('buy')
+    expect(r.trades[0]!.signalD).toBe('2026-08-19')
+  })
+
+  it('從頭到尾沒有低檔金叉 → 價格再怎麼進加碼區也不買', () => {
+    const noCross = goodAdd({ k: 28, d: 26, kPrev: 27, dPrev: 25 })
+    const r = run(bars, { '2026-08-17': noCross, '2026-08-19': noCross })
+    expect(r.trades).toHaveLength(0)
+  })
+
+  it('先回低檔、之後才金叉（金叉當天 K 已回到 30 以上）→ 仍然算數', () => {
+    // 上升趨勢裡 KD 的回檔又淺又快，金叉出現時 K 常常已經回到 30 以上。
+    // 要求同日成立的話，台股這半年一次都不會進場（params 2026-08-21.3）。
+    const dip = goodAdd({ k: 21, d: 30, kPrev: 25, dPrev: 33 })       // 回低檔，沒交叉
+    const crossLate = goodAdd({ k: 36, d: 34, kPrev: 30, dPrev: 35 }) // 金叉，但 K 已 36
+    const r = run(bars, {
+      '2026-08-17': dip,
+      '2026-08-18': crossLate,
+      '2026-08-19': goodAdd({ k: 40, d: 38, kPrev: 39, dPrev: 37 }),  // 價格進區
+    })
+    expect(r.trades).toHaveLength(1)
+    expect(r.trades[0]!.side).toBe('buy')
+  })
+
+  it('只有金叉、從來沒回過低檔 → 不算數', () => {
+    const highCross = goodAdd({ k: 55, d: 52, kPrev: 50, dPrev: 53 })
+    const r = run(bars, {
+      '2026-08-17': highCross,
+      '2026-08-19': goodAdd({ k: 45, d: 43, kPrev: 44, dPrev: 42 }),
+    })
+    expect(r.trades).toHaveLength(0)
+  })
+
+  it('金叉之後 K 衝上高檔 → 訊號失效，那時才進加碼區也不買（那是追高）', () => {
+    const overbought = goodAdd({ k: 82, d: 75, kPrev: 80, dPrev: 74 })
+    const r = run(bars, {
+      '2026-08-17': crossDay,
+      '2026-08-18': overbought,   // K > 70 解除
+      '2026-08-19': laterDip,
+    })
+    expect(r.trades).toHaveLength(0)
+  })
+
+  it('止損也會把訊號解除，冷卻結束後要重新金叉才算數', () => {
+    const stopBars = [
+      bar('2026-08-17', 100, 100, 102, 100),  // 金叉 + 進加碼區 → 買
+      bar('2026-08-18', 100, 100, 100, 100),
+      bar('2026-08-19', 100, 89, 100, 88),    // 跌破止跌 90
+      bar('2026-08-20', 89, 89, 89, 89),
+      bar('2026-08-21', 89, 89, 102, 100),
+      bar('2026-08-24', 100, 100, 102, 100),
+      bar('2026-08-25', 100, 100, 102, 100),
+      bar('2026-08-26', 100, 100, 102, 100),
+      bar('2026-08-27', 100, 100, 102, 100),
+      bar('2026-08-28', 100, 100, 102, 100),
+    ]
+    // 止損之後每天價格都在加碼區、%b 也夠低，但沒有新的低檔金叉
+    const after = goodAdd({ k: 28, d: 26, kPrev: 27, dPrev: 25 })
+    const days: Record<string, RuleDay> = { '2026-08-17': goodAdd(), '2026-08-19': goodAdd() }
+    for (const b of stopBars.slice(3)) days[b.date] = after
+    const r = run(stopBars, days)
+    expect(r.trades.filter((t) => t.side === 'buy' && t.signalD > '2026-08-19')).toHaveLength(0)
+  })
+})
+
 describe('holdDecider：買進持有對照組', () => {
   const bars = [
     bar('2026-08-17', 100, 100, 100, 100),
