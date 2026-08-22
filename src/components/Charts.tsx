@@ -1,9 +1,30 @@
+'use client'
+import { useState } from 'react'
+
 /**
  * 兩張圖，直接輸出 SVG，不用圖表函式庫（PLAN §3）。
  *
  * 顏色一律走 CSS 變數（`.closeline` / `.bandfill` …），**不能寫死**，
  * 否則深色模式下線條會消失。縮放靠 viewBox + width:100%，絕不橫向捲動。
+ *
+ * ## 為什麼是 client component
+ *
+ * 圖上原本只有最後一天標了數字，中間任何一天都得用眼睛去對 Y 軸——
+ * 六個月的圖等於只有一天可讀。十字線需要滑鼠與鍵盤事件，所以這個檔案是
+ * client component；代價是 123 個點會被序列化到瀏覽器（約 5KB），值得。
  */
+
+/** 把游標的 clientX 換算成資料點的索引。SVG 會縮放，所以要先換回 viewBox 座標 */
+function indexFromEvent(
+  el: SVGSVGElement, clientX: number, vbWidth: number,
+  ml: number, pw: number, count: number,
+): number {
+  const box = el.getBoundingClientRect()
+  if (box.width === 0 || count < 2) return count - 1
+  const vbX = ((clientX - box.left) / box.width) * vbWidth
+  const t = (vbX - ml) / pw
+  return Math.max(0, Math.min(count - 1, Math.round(t * (count - 1))))
+}
 
 /**
  * viewBox 的寬度。**這個數字決定手機上的字看不看得見。**
@@ -115,6 +136,12 @@ export function PriceChart({
   const lastI = bars.length - 1
   const lastC = bars[lastI]!.c
 
+  // null＝沒有停在任何一天，顯示最後一天（也就是「今天」）
+  const [hoverI, setHoverI] = useState<number | null>(null)
+  const cur = hoverI ?? lastI
+  const curBar = bars[cur]!
+  const curBand = bandByDate.get(curBar.d)
+
   // 窄圖只放 4 個日期標籤：360 單位寬放 6 個「02-24」會黏在一起
   const labelEvery = Math.ceil(bars.length / (W < 600 ? 4 : 6))
 
@@ -149,8 +176,31 @@ export function PriceChart({
 
   return (
     <>
-      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="收盤價與布林通道"
-        data-last-bar={bars[bars.length - 1]!.d}>
+      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`}
+        data-last-bar={bars[bars.length - 1]!.d}
+        data-hover={hoverI ?? ''}
+        /* 有互動就不只是圖片：給它一個可聚焦的角色與鍵盤操作，
+           不然只有滑鼠使用者讀得到中間那幾個月 */
+        role="application"
+        tabIndex={0}
+        aria-label={`收盤價與布林通道。左右鍵可逐日查看，目前 ${curBar.d} 收盤 ${curBar.c.toFixed(2)}`}
+        onMouseMove={(e) => setHoverI(
+          indexFromEvent(e.currentTarget, e.clientX, W, ML, PW, bars.length))}
+        onMouseLeave={() => setHoverI(null)}
+        onTouchStart={(e) => setHoverI(
+          indexFromEvent(e.currentTarget, e.touches[0]!.clientX, W, ML, PW, bars.length))}
+        onTouchMove={(e) => setHoverI(
+          indexFromEvent(e.currentTarget, e.touches[0]!.clientX, W, ML, PW, bars.length))}
+        onBlur={() => setHoverI(null)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault()
+            const step = e.key === 'ArrowLeft' ? -1 : 1
+            setHoverI(Math.max(0, Math.min(bars.length - 1, cur + step)))
+          } else if (e.key === 'Home') { e.preventDefault(); setHoverI(0) }
+          else if (e.key === 'End') { e.preventDefault(); setHoverI(bars.length - 1) }
+          else if (e.key === 'Escape') { setHoverI(null) }
+        }}>
         {niceTicks(ymin, ymax).map((v) => (
           <g key={v}>
             <line className="grid" x1={ML} y1={y(v)} x2={W - 14} y2={y(v)} />
@@ -225,15 +275,40 @@ export function PriceChart({
           )
         })}
 
-        {/* 今天在哪：端點圓點＋收盤價標籤 */}
-        <circle cx={x(lastI)} cy={y(lastC)} r={4} className="hoverdot"
+        {/* 停在哪一天：十字線 ＋ 圓點 ＋ 讀數。
+            沒有 hover 時停在最後一天，也就是「今天」——所以這一組同時是
+            「今天在哪」的端點標記，不必畫兩份。 */}
+        {hoverI !== null && (
+          <line x1={x(cur)} y1={MT} x2={x(cur)} y2={MT + PH}
+            style={{ stroke: 'var(--blue)', strokeWidth: 1, opacity: .35 }} />
+        )}
+        <circle cx={x(cur)} cy={y(curBar.c)} r={4} className="hoverdot"
           style={{ fill: 'var(--blue)' }} />
-        <circle cx={x(lastI)} cy={y(lastC)} r={7.5} fill="none"
+        <circle cx={x(cur)} cy={y(curBar.c)} r={7.5} fill="none"
           style={{ stroke: 'var(--blue)', opacity: .35 }} />
-        <text x={x(lastI) - 12} y={y(lastC) - 12} textAnchor="end"
-          style={{ fill: 'var(--blue)', fontWeight: 800, fontSize: 13 }}>
-          {lastC.toFixed(2)}
-        </text>
+
+        {(() => {
+          // 讀數靠右會被切掉，所以過了中線就翻到左邊
+          const flip = x(cur) > ML + PW * 0.62
+          const tx = flip ? x(cur) - 12 : x(cur) + 12
+          const anchor = flip ? 'end' : 'start'
+          const ty = Math.max(MT + 34, Math.min(y(curBar.c) - 14, MT + PH - 8))
+          return (
+            <g style={{ pointerEvents: 'none' }} data-testid="chart-readout">
+              <text x={tx} y={ty - 16} textAnchor={anchor} className="tick"
+                style={{ fill: 'var(--muted)' }}>{curBar.d}</text>
+              <text x={tx} y={ty} textAnchor={anchor}
+                style={{ fill: 'var(--blue)', fontWeight: 800, fontSize: 14 }}>
+                {curBar.c.toFixed(2)}
+              </text>
+              {curBand && (
+                <text x={tx} y={ty + 15} textAnchor={anchor} className="tick">
+                  中軌 {curBand.mid.toFixed(2)}
+                </text>
+              )}
+            </g>
+          )
+        })()}
 
         {bars.map((b, i) => (i % labelEvery === 0 ? (
           <text key={b.d} className="tick" x={x(i)} y={H - 6} textAnchor="middle">{b.d.slice(5)}</text>
