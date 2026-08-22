@@ -134,7 +134,8 @@ export function WatchList({
         <div className="listhead" aria-hidden="true">
           <span>標的</span>
           <span>收盤</span>
-          <span className="lvlhead"><span>波段賣出</span><span>止跌</span><span>加碼</span></span>
+          {/* 標籤已經貼在每個數字旁邊（賣／止／加），表頭不必再排三個 */}
+          <span>關鍵價位</span>
           <span>照建議做</span>
           <span />
         </div>
@@ -188,9 +189,9 @@ export function WatchList({
                     data-dir={r.chg_pct !== null && r.chg_pct < 0 ? 'down' : 'up'}>
                     {pct(r.chg_pct)}
                   </span>
-                  {r.k !== null && r.d_val !== null && (
-                    <span className="rkd">K {r.k.toFixed(1)} / D {r.d_val.toFixed(1)}</span>
-                  )}
+                  {/* K/D 拿掉了。它是指標細節不是決策：真正要做什麼由狀態徽章
+                      與 AI 的動作回答，KD 只決定「什麼時候可以按下去」，
+                      那是點進去才需要看的東西。 */}
                 </div>
               </div>
 
@@ -198,13 +199,17 @@ export function WatchList({
                 <LevelInline levels={r.levels} />
                 {/* 資料日期只在**這一檔落後了**的時候才顯示。四列都印同一個日期
                     是廢話，頁首已經說過；真正要提醒的是「這檔跟其他檔不同步」。 */}
-                <div className="rmeta">
-                  {r.tone ?? ''}
-                  {r.d && r.d !== latestByMarket[r.market] && (
-                    <span className="lagging">　停在 {r.d}</span>
-                  )}
-                  {!r.d && <span className="lagging">　尚無資料</span>}
-                </div>
+                {/* 定調句拿掉了。實測四列全部是「短線回檔、波段偏多」——
+                    每列都一樣的句子沒有分辨力，只是把版面填滿。
+                    它留在個股頁，那裡才是要讀理由的地方。
+                    這裡只留真正的異常：這一檔跟其他檔不同步。 */}
+                {((r.d && r.d !== latestByMarket[r.market]) || !r.d) && (
+                  <div className="rmeta">
+                    <span className="lagging">
+                      {r.d ? `停在 ${r.d}` : '尚無資料'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* 模擬帳戶。欄位順序要跟表頭一致——一開始把它放在價位**前面**，
@@ -235,10 +240,11 @@ export function WatchList({
                         : `現金 ${money0(r.sim.initialTwd)}`}
                     </div>
 
-                    {/* 追蹤天數太少時，報酬率是雜訊不是結果，不要讓它當主角 */}
+                    {/* 追蹤天數太少時，報酬率是雜訊不是結果，不要讓它當主角。
+                        天數與起算日併一行——兩行講同一件事是重複。 */}
                     {r.sim.days < 10 ? (
                       <div className="rsimsub" data-testid={`young-${r.code}`}>
-                        追蹤 {r.sim.days} 天，太短
+                        追蹤 {r.sim.days} 天（{r.sim.startedOn.slice(5)} 起），太短
                       </div>
                     ) : (
                       <>
@@ -260,7 +266,9 @@ export function WatchList({
                       </>
                     )}
 
-                    <div className="rsimsub">自 {r.sim.startedOn.slice(5)}</div>
+                    {r.sim.days >= 10 && (
+                      <div className="rsimsub">自 {r.sim.startedOn.slice(5)}</div>
+                    )}
                   </>
                 ) : (
                   <span className="rsimsub">還沒開始模擬</span>

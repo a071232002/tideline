@@ -17,9 +17,10 @@ export interface StripLevel {
 }
 
 const META = {
-  sell: { label: '波段賣出', hint: '反彈至此減碼', cls: 'sellc', varName: 'sell' },
-  stop: { label: '止跌', hint: '收盤跌破轉弱', cls: 'stopc', varName: 'stop' },
-  add: { label: '加碼', hint: '回檔至此分批進', cls: 'buyc', varName: 'buy' },
+  // `short` 給清單用：標籤要貼著數字，一個字就夠，不需要把「波段賣出」搬過去
+  sell: { label: '波段賣出', short: '賣', hint: '反彈至此減碼', cls: 'sellc', varName: 'sell' },
+  stop: { label: '止跌', short: '止', hint: '收盤跌破轉弱', cls: 'stopc', varName: 'stop' },
+  add: { label: '加碼', short: '加', hint: '回檔至此分批進', cls: 'buyc', varName: 'buy' },
 } as const
 
 function money(v: number): string {
@@ -93,12 +94,14 @@ export function LevelInline({ levels }: { levels: StripLevel[] }) {
         const edge = l ? (EDGE[k] === 'hi' && l.hi !== undefined ? l.hi : l.lo) : null
         const isRange = l !== undefined && l.hi !== undefined && l.hi !== l.lo
         return (
-          <span key={k} className="inlinecell">
-            <span className="inlinelab">{m.label}</span>
-            <span className={`tnum ${m.cls}`} style={{ fontWeight: 700 }}
-              /* 有區間時把完整範圍放進 title，滑過去看得到，
-                 但不佔版面 */
-              title={isRange ? `${money(l!.lo)}～${money(l!.hi!)}` : undefined}>
+          <span key={k} className={`inlinecell ${m.cls}`}
+            title={isRange ? `${m.label} ${money(l!.lo)}～${money(l!.hi!)}` : m.label}>
+            {/* 標籤貼著數字，不再排成三小欄。
+                子網格會逼出固定寬度（實測 264px），而三個帶標籤的數字
+                一行就放得下——標籤貼著數字，每個數字自己說得出自己是什麼，
+                不需要靠欄位對齊來解釋。 */}
+            <span className="inlinelab">{m.short}</span>
+            <span className="tnum inlineval">
               {edge === null ? '—' : money(edge)}
               {isRange && <span className="edgemark" aria-hidden="true">
                 {EDGE[k] === 'lo' ? '↑' : '↓'}

@@ -333,7 +333,7 @@ a { color: inherit; }
   /* 價位欄改成固定寬，彈性空間留給決策欄。
      原本價位是 1fr，會把剩餘寬度全部吸走——三個數字用不到 336px，
      而旁邊的 AI 決策、投入金額、起算日才是真正需要空間的東西。 */
-  grid-template-columns: 150px 126px 264px minmax(0, 1fr) auto;
+  grid-template-columns: 150px 110px 208px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
   padding: 14px 18px;
@@ -488,19 +488,24 @@ a { color: inherit; }
 }
 .btnquiet:hover:not(:disabled) { color: var(--sell); border-color: var(--line); }
 
-/* 價位三欄固定寬，各列才對得齊 */
+/* 三個價位排成一行，標籤貼著數字。
+   原本是三小欄的子網格，會逼出 264px 的固定寬；標籤貼著數字之後，
+   每個數字自己說得出自己是什麼，不必靠欄位對齊來解釋。 */
 .inlinelvl {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  align-items: baseline;
 }
-.inlinecell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.inlinecell { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.inlineval { font-weight: 700; }
+.sellc .inlineval { color: var(--sell); }
+.stopc .inlineval { color: var(--stop); }
+.buyc .inlineval { color: var(--buy); }
 /* 四位數的高價股（2330 的 2,445.00～2,470.00）在三分之一欄寬裡放不下。
    允許折行——溢出去疊到隔壁欄比換行難讀得多（實測截圖才看得出來）。 */
 .inlinecell > .tnum { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
-@media (max-width: 720px) {
-  .inlinelvl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+
 
 /* 狀態徽章：只在真的接近或已到價位時出現。到處都有就等於沒有訊號。 */
 .statusbadge {
@@ -627,18 +632,14 @@ a { color: inherit; }
 /* 清單表頭：價位標籤放這裡，列裡就不必每列重複三次 */
 .listhead {
   display: grid;
-  grid-template-columns: 150px 126px 264px minmax(0, 1fr) auto;
+  grid-template-columns: 150px 110px 208px minmax(0, 1fr) auto;
   gap: 12px;
   padding: 0 18px 8px;
 }
-.listhead .lvlhead {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
 @media (max-width: 720px) { .listhead { display: none; } }
-/* 桌機由表頭負責標籤，列裡的重複標籤收起來 */
-@media (min-width: 721px) { .row .inlinelab { display: none; } }
+/* 標籤現在貼在每個數字旁邊（賣／止／加），不再由表頭負責——
+   那條「桌機隱藏列內標籤」的規則會把它們一起藏掉，數字就沒人說得出是什麼了。 */
+.row .inlinelab { font-size: var(--t-micro); }
 
 /* 列高一致：有徽章與沒徽章的列不要差一截，看起來像鋸齒 */
 .row { min-height: 92px; align-items: center; }
