@@ -123,9 +123,6 @@ export function WatchList({
           <span className="fine">
             {summary.n} 檔在模擬
             {summary.aiLed > 0 ? `・${summary.aiLed} 檔由 AI 判斷` : '・AI 尚未開始'}
-            <NavLink href="/review" className="revlink" data-testid="review-link">
-              回顧 →
-            </NavLink>
           </span>
         </div>
       )}

@@ -1,5 +1,4 @@
 import type { SimTrack } from '@/lib/data'
-import { NavLink } from './NavLink'
 import { CapitalForm } from './CapitalForm'
 
 /**
@@ -80,7 +79,6 @@ export function SimCard({ tracks, market, symbolId }: {
     <section className="card sim" data-testid="sim-card">
       <div className="simhead">
         <h2>如果照建議做</h2>
-        <NavLink href="/review" className="revlink">全部回顧 →</NavLink>
       </div>
 
       {/* 一句話說清楚這張卡在算什麼。少了它，下面每個數字都要讀者自己猜前提 */}
@@ -162,6 +160,24 @@ export function SimCard({ tracks, market, symbolId }: {
           標準費率的 {(20 / perBatch / 0.001425).toFixed(1)} 倍）。建議至少 50,000 元。
         </p>
       )}
+
+      {/* 細部統計收進摺疊區。它們回答「為什麼會這樣」，是第二層問題——
+          攤開來會讓讀者先花力氣找重點。原本這些在 /review，
+          但那一頁只是把同一件事再畫一次，反而要在頁面之間換算日期。 */}
+      <details className="revdetails">
+        <summary>更多數字</summary>
+        <dl className="revstats">
+          <div><dt>中途最多虧</dt>
+            <dd className="tnum">−{lead.stats.maxDrawdownPct.toFixed(2)}%</dd></div>
+          {/* §11 的規矩：次數少的時候不寫百分比。「12 次裡 7 次」比「勝率 58%」誠實 */}
+          <div><dt>賣出賺錢</dt>
+            <dd className="tnum">
+              {lead.stats.closed > 0 ? `${lead.stats.closed} 次裡 ${lead.stats.wins} 次` : '—'}
+            </dd></div>
+          <div><dt>觸發停損</dt><dd className="tnum">{lead.stats.stopped} 次</dd></div>
+          <div><dt>買了不動</dt><dd className="tnum">{pct(hold.retPct)}</dd></div>
+        </dl>
+      </details>
 
       <CapitalForm symbolId={symbolId} current={lead.initialTwd} market={market} />
 

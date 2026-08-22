@@ -1070,3 +1070,27 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 }
 /* 第一段緊接在狀態列下面，不需要那麼大的上緣留白 */
 main > .secttl:first-of-type { margin-top: 16px; }
+
+/* ------------------------------------------------- 圖層開關
+ *
+ * 圖是主體，技術與回顧是可以切換的圖層。開關做成一排小膠囊放在圖上方——
+ * 它們是「我現在想多看一眼」的臨時動作，不是設定，所以不寫進網址也不記住。
+ */
+.layerbar {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 0 0 12px;
+}
+.layerbtn {
+  appearance: none; font: inherit; font-size: var(--t-label); cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink2);
+  border-radius: 99px; padding: 6px 12px; min-height: 36px; white-space: nowrap;
+}
+.layerbtn:hover { color: var(--ink); border-color: var(--muted); }
+.layerbtn.on {
+  background: var(--ink); color: var(--card); border-color: var(--ink); font-weight: 700;
+}
+.layerbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* 主圖的卡片：圖是主體，不要被卡片的留白吃掉太多 */
+.chartcard { padding: 14px 16px; }
+.gappanel { margin-top: 4px; }

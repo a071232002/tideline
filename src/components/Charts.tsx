@@ -44,14 +44,6 @@ const ML = 46
 const MT = 14
 
 interface Pt { d: string; c: number }
-export interface LevelHistoryPoint {
-  d: string
-  sellLo: number | null
-  stop: number | null
-  addLo: number | null
-  addHi: number | null
-  origin: string
-}
 interface Band { d: string; mid: number; up: number; lo: number }
 /** 模擬帳戶的成交點。畫在圖上比任何統計數字都有說服力（PLAN §13.7） */
 export interface TradeMark {
@@ -74,14 +66,12 @@ function niceTicks(min: number, max: number, count = 5): number[] {
 
 /** 圖一：收盤價＋布林通道＋三條水平價位線 */
 export function PriceChart({
-  bars, bands, levels, currency, history, marks, width = W_WIDE,
+  bars, bands, levels, currency, marks, width = W_WIDE,
 }: {
   bars: Pt[]
   bands: Band[]
   levels: { sell?: [number, number] | null; stop?: number | null; add?: [number, number] | null }
   currency: string
-  /** 當時每天說的價位。給了就疊上去，回顧才看得出建議準不準。 */
-  history?: LevelHistoryPoint[]
   /** 模擬帳戶的成交點。一眼就看得出是「低接高出」還是「追高殺低」。 */
   marks?: TradeMark[]
   /** viewBox 寬度。窄螢幕傳 `W_NARROW`，否則字會縮到讀不到 */
@@ -145,34 +135,14 @@ export function PriceChart({
   // 窄圖只放 4 個日期標籤：360 單位寬放 6 個「02-24」會黏在一起
   const labelEvery = Math.ceil(bars.length / (W < 600 ? 4 : 6))
 
-  // 歷史價位：階梯線（價位一天一個值，不該畫成平滑折線——它是離散的判斷）
   const idxByDate = new Map(bars.map((b, i) => [b.d, i]))
-  const histSeries: { key: string; varName: string; pick: (h: LevelHistoryPoint) => number | null }[] = [
-    { key: 'hist-sell', varName: 'sell', pick: (h) => h.sellLo },
-    { key: 'hist-stop', varName: 'stop', pick: (h) => h.stop },
-    { key: 'hist-add', varName: 'buy', pick: (h) => h.addHi },
-  ]
-  const histPaths = (history ?? []).length > 1
-    ? histSeries.map(({ key, varName, pick }) => {
-        let d = ''
-        let prevY: number | null = null
-        for (const h of history!) {
-          const i = idxByDate.get(h.d)
-          const v = pick(h)
-          if (i === undefined || v === null) continue
-          const px = x(i)
-          const py = y(v)
-          if (d === '') d = `M${px.toFixed(1)},${py.toFixed(1)}`
-          else if (prevY !== null && Math.abs(py - prevY) > 0.01) {
-            d += `L${px.toFixed(1)},${prevY.toFixed(1)}L${px.toFixed(1)},${py.toFixed(1)}`
-          } else {
-            d += `L${px.toFixed(1)},${py.toFixed(1)}`
-          }
-          prevY = py
-        }
-        return { key, varName, d }
-      }).filter((p) => p.d !== '')
-    : []
+
+  // 歷史價位的階梯線拿掉了。
+  //
+  // 它原本疊在這張圖上回答「當時說的價位後來準不準」，但那是**回顧**的問題，
+  // /review 現在用「價格 ＋ 買賣點 ＋ 與買了不動的差距」直接回答。
+  // 留在這裡只是把主圖變成六層，而這張圖要回答的是另一件事：
+  // **買在哪、賣在哪，價格當時在什麼位置。**
 
   return (
     <>
@@ -207,17 +177,11 @@ export function PriceChart({
             <text className="tick" x={ML - 6} y={y(v) + 4} textAnchor="end">{v.toFixed(digits)}</text>
           </g>
         ))}
-        {/* 當時說的價位，畫成階梯線疊在走勢上。
-            這是回顧的重點：止跌線被跌破之後價格真的續跌了嗎？
-            賣出線碰到之後真的回落嗎？看圖比看統計數字直接。 */}
-        {histPaths.map((h) => (
-          <path key={h.key} d={h.d} fill="none"
-            style={{ stroke: `var(--${h.varName})`, strokeWidth: 1.5, opacity: .75 }} />
-        ))}
         {zones.map((z) => (
           <rect key={z.varName} x={ML} y={Math.min(y(z.hi), y(z.lo))}
             width={PW} height={Math.max(Math.abs(y(z.lo) - y(z.hi)), 2)}
-            style={{ fill: `var(--${z.varName})`, opacity: .10 }} />
+            /* 再淡一階。價位是背景，買賣點與價格才是這張圖的主角 */
+            style={{ fill: `var(--${z.varName})`, opacity: .07 }} />
         ))}
         {fill && <path className="bandfill" d={fill} />}
         {upPath && <path className="bandline" d={upPath} />}
@@ -239,12 +203,8 @@ export function PriceChart({
               lastY = labelY
               return (
                 <g key={h.label}>
-                  {/* 有歷史軌跡時不再畫整條橫線：那條線的右端就是軌跡的右端，
-                      兩條疊在一起只會互相干擾。沒有歷史時才需要它當參考。 */}
-                  {histPaths.length === 0 && (
-                    <line className="refline" x1={ML} y1={lineY} x2={W - 14} y2={lineY}
-                      style={{ stroke: `var(--${varName})` }} />
-                  )}
+                  <line className="refline" x1={ML} y1={lineY} x2={W - 14} y2={lineY}
+                    style={{ stroke: `var(--${varName})`, opacity: .45 }} />
                   {/* 價位標籤放左側。右邊留給「今天的價格」那個端點標籤，
                       兩邊都擠在右緣會疊在一起。 */}
                   <text className="tick" x={ML + 6} y={labelY} textAnchor="start"
@@ -255,23 +215,34 @@ export function PriceChart({
               )
             })
         })()}
-        {/* 模擬帳戶的成交點。買綠三角朝上、賣紅三角朝下、止損橘色。
-            這比任何統計數字都有說服力——低接高出還是追高殺低，用看的就知道。 */}
+        {/* 買賣點。**這張圖的主角就是它們**——日期與成交價直接落在價格線上，
+            不必去對另一張表。所以三角畫大一點，並且把成交價寫在旁邊。 */}
         {(marks ?? []).map((m, n) => {
           const i = idxByDate.get(m.d)
           if (i === undefined) return null
           const px = x(i)
           const py = y(m.price)
           const varName = m.stop ? 'stop' : m.side === 'buy' ? 'buy' : 'sell'
+          const buy = m.side === 'buy'
           // 買點畫在價格下方朝上、賣點畫在上方朝下——不要蓋住收盤價那條線
-          const tri = m.side === 'buy'
-            ? `${px},${py + 5} ${px - 4.5},${py + 12} ${px + 4.5},${py + 12}`
-            : `${px},${py - 5} ${px - 4.5},${py - 12} ${px + 4.5},${py - 12}`
+          const tri = buy
+            ? `${px},${py + 6} ${px - 6},${py + 16} ${px + 6},${py + 16}`
+            : `${px},${py - 6} ${px - 6},${py - 16} ${px + 6},${py - 16}`
           return (
-            <polygon key={`${m.d}-${m.side}-${n}`} points={tri}
-              style={{ fill: `var(--${varName})`, opacity: .9 }}>
-              <title>{`${m.d} ${m.side === 'buy' ? '買進' : m.stop ? '止損賣出' : '賣出'} @ ${m.price.toFixed(2)}`}</title>
-            </polygon>
+            <g key={`${m.d}-${m.side}-${n}`}>
+              {/* 一條細線把成交點釘回價格線上，眼睛才知道它對應哪一天 */}
+              <line x1={px} y1={py} x2={px} y2={buy ? py + 6 : py - 6}
+                style={{ stroke: `var(--${varName})`, strokeWidth: 1.2 }} />
+              <polygon points={tri} style={{ fill: `var(--${varName})` }}>
+                <title>
+                  {`${m.d} ${buy ? '買進' : m.stop ? '止損賣出' : '賣出'} @ ${m.price.toFixed(2)}`}
+                </title>
+              </polygon>
+              <text x={px} y={buy ? py + 28 : py - 21} textAnchor="middle"
+                style={{ fill: `var(--${varName})`, fontWeight: 700, fontSize: 11 }}>
+                {m.price.toFixed(2)}
+              </text>
+            </g>
           )
         })}
 
@@ -317,20 +288,27 @@ export function PriceChart({
       {/* 圖例在手機上量到 121px，而圖本身只有 318px——說明佔了內容的 38%。
           賣出／止跌／加碼三格是**純重複**：那三個價位就用同色標在圖上，
           寫著「賣出 107.50」。窄螢幕收起來，圖例從 8 格降到 3 格。 */}
+      {/* 圖例只列**真的畫出來的東西**。
+          圖層可以關掉之後，固定列出六項會變成謊：畫面上沒有布林通道，
+          圖例卻說有——讀者會去找一條不存在的線。 */}
       <div className="legend">
         <span><i className="sw" style={{ borderColor: 'var(--blue)' }} />收盤價（末點＝今日）</span>
-        <span><i className="sw" style={{ borderColor: 'var(--mid)' }} />布林中軌</span>
-        <span><i className="sw" style={{ borderColor: 'var(--bandline)' }} />上下軌</span>
-        <span className="wide-only"><i className="sw dash" style={{ borderColor: 'var(--sell)' }} />賣出</span>
-        <span className="wide-only"><i className="sw dash" style={{ borderColor: 'var(--stop)' }} />止跌</span>
-        <span className="wide-only"><i className="sw dash" style={{ borderColor: 'var(--buy)' }} />加碼</span>
+        {withBand.length > 0 && (
+          <>
+            <span><i className="sw" style={{ borderColor: 'var(--mid)' }} />布林中軌</span>
+            <span><i className="sw" style={{ borderColor: 'var(--bandline)' }} />上下軌</span>
+          </>
+        )}
+        {hlines.map((h) => {
+          const varName = h.label === '賣出' ? 'sell' : h.label === '止跌' ? 'stop' : 'buy'
+          return (
+            <span key={h.label} className="wide-only">
+              <i className="sw dash" style={{ borderColor: `var(--${varName})` }} />{h.label}
+            </span>
+          )
+        })}
         {(marks ?? []).length > 0 && (
           <span><i className="sw" style={{ borderColor: 'var(--buy)' }} />▲買／▼賣</span>
-        )}
-        {histPaths.length > 0 && (
-          <span className="wide-only" style={{ color: 'var(--muted)' }}>
-            階梯線＝<b>當時每天說的價位</b>（回頭看準不準）
-          </span>
         )}
       </div>
     </>

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getStockPage, getSim } from '@/lib/data'
-import { PriceChart, KdChart, W_NARROW } from '@/components/Charts'
+import { ChartBoard } from '@/components/ChartBoard'
+import { gapSeries } from '@/components/GapPanel'
 import { NavLink } from '@/components/NavLink'
 import { LevelStrip, type StripLevel } from '@/components/LevelStrip'
 import { levelStatus } from '@/lib/status'
@@ -40,6 +41,9 @@ export default async function StockPage({
   const sim = await getSim(page.symbol.id)
   const simLead = sim.find((t) => t.track === 'ai' && t.trades > 0)
     ?? sim.find((t) => t.track === 'rule')
+  // 與「買了不動」的差距，當成主圖的一個圖層。回顧不再是另一頁。
+  const simHold = sim.find((t) => t.track === 'hold')
+  const gapCurve = simLead && simHold ? gapSeries(simLead.curve, simHold.curve) : []
 
   const a = page.analysis
   const cur = page.symbol.currency
@@ -145,6 +149,31 @@ export default async function StockPage({
 
       <LevelStrip levels={strip} close={close} />
 
+      {/* ---------------------------------------------------------------
+          圖是主體，技術與回顧是它的圖層。
+
+          原本這一頁有兩張獨立的圖（價格、KD），另外還有一整個 /review 頁面
+          畫「價格＋買賣點＋差距」——同一件事畫在三個地方，而讀者要在頁面之間
+          換算日期才對得起來。現在只有這一張，其餘都是可以開關的圖層。
+          --------------------------------------------------------------- */}
+      <h2 className="secttl" data-testid="sect-chart">走勢與買賣</h2>
+      <section className="card chartcard">
+        <ChartBoard
+          bars={page.bars}
+          bands={page.bands}
+          levels={{
+            sell: levels.sell ? [levels.sell.lo, levels.sell.hi] : null,
+            stop: levels.stop?.price ?? null,
+            add: levels.add ? [levels.add.lo, levels.add.hi] : null,
+          }}
+          currency={cur}
+          marks={simLead?.marks ?? []}
+          gap={gapCurve}
+          kd={kdPoints}
+          hasAccount={simLead !== undefined}
+        />
+      </section>
+
       <h2 className="secttl" data-testid="sect-check">這些建議準不準</h2>
       <SimCard tracks={sim} market={page.symbol.market} symbolId={page.symbol.id} />
 
@@ -199,41 +228,6 @@ export default async function StockPage({
           ・由{verdict.source === 'rule' ? '程式規則' : 'AI'}產生
           ・<b>非投資建議</b>
         </p>
-      </section>
-
-
-
-{/* 兩種 viewBox 寬度各渲染一份，用 CSS 切換。
-          920 寬的 viewBox 塞進 375px 螢幕，軸標籤實測只剩 3.6px——
-          那不是小，是看不見。伺服器端就決定好，不需要 JS 量視窗。 */}
-      <section className="card">
-        <h2>近 6 個月收盤價與布林通道</h2>
-        {[undefined, W_NARROW].map((w) => (
-          <div key={w ?? 'wide'} className={w ? 'chart-narrow' : 'chart-wide'}>
-            <PriceChart
-              bars={page.bars}
-              bands={page.bands}
-              levels={{
-                sell: levels.sell ? [levels.sell.lo, levels.sell.hi] : null,
-                stop: levels.stop?.price ?? null,
-                add: levels.add ? [levels.add.lo, levels.add.hi] : null,
-              }}
-              currency={cur}
-              history={page.levelHistory}
-              marks={simLead?.marks ?? []}
-              width={w}
-            />
-          </div>
-        ))}
-      </section>
-
-      <section className="card">
-        <h2>KD 指標（9,3,3）</h2>
-        {[undefined, W_NARROW].map((w) => (
-          <div key={w ?? 'wide'} className={w ? 'chart-narrow' : 'chart-wide'}>
-            <KdChart points={kdPoints} width={w} />
-          </div>
-        ))}
       </section>
 
       {/* 估值是**基本面**，跟上面整段技術分析不是同一件事——

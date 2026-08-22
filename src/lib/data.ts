@@ -288,11 +288,6 @@ export interface StockPage {
   bars: { d: string; o: number; h: number; l: number; c: number }[]
   bands: { d: string; mid: number; up: number; lo: number }[]
   kd: { d: string; k: number; d_val: number }[]
-  /** 當時每天說的價位，用來疊在走勢上回顧（PLAN §11） */
-  levelHistory: {
-    d: string; sellLo: number | null; stop: number | null
-    addLo: number | null; addHi: number | null; origin: string
-  }[]
   /** 當日有沒有成功跑過排程——用來分辨「休市」與「資料未更新」（PLAN §7） */
   lastJobOk: boolean
 }
@@ -327,11 +322,6 @@ export const getStockPage = unstable_cache(
     const { data: val } = await db
       .from('daily_valuation').select('*')
       .eq('symbol_id', sym.id).order('d', { ascending: false }).limit(1).maybeSingle()
-
-    // 歷史建議：畫成疊圖才看得出「當時說的價位」後來有沒有意義
-    const { data: hist } = await db
-      .from('daily_analysis').select('d, levels, origin')
-      .eq('symbol_id', sym.id).order('d', { ascending: true })
 
     const { data: jobs } = await db
       .from('job_runs').select('ok, finished_at')
@@ -373,20 +363,6 @@ export const getStockPage = unstable_cache(
       })),
       bands,
       kd: [],
-      levelHistory: (hist ?? []).map((h) => {
-        const lv = h.levels as {
-          sell?: { lo: number } | null; stop?: { price: number } | null
-          add?: { lo: number; hi: number } | null
-        }
-        return {
-          d: h.d as string,
-          sellLo: lv?.sell?.lo ?? null,
-          stop: lv?.stop?.price ?? null,
-          addLo: lv?.add?.lo ?? null,
-          addHi: lv?.add?.hi ?? null,
-          origin: (h.origin as string) ?? 'live',
-        }
-      }),
       lastJobOk: Boolean(jobs?.[0]?.ok),
     }
   },
@@ -423,6 +399,8 @@ export interface SimTrack {
     triggers: string[]; reason: string | null
   }[]
   marks: { d: string; side: 'buy' | 'sell'; price: number; stop: boolean }[]
+  /** 完整統計（最大回落、賣出賺錢幾次、被止損幾次）。回顧收進個股頁之後才需要 */
+  stats: TrackStats
   /** 明天開盤要做的事。這是整張卡最重要的一行——一句可以照做的指令 */
   pending: {
     signalD: string; buy: boolean; sell: boolean
@@ -444,11 +422,11 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
   for (const acc of accounts) {
     const id = acc.id as string
     const { data: eq } = await supabase
-      .from('sim_equity').select('d, cash, shares, equity, ret_pct')
+      .from('sim_equity').select('d, cash, shares, cost, mark, equity, ret_pct')
       .eq('account_id', id).order('d', { ascending: true })
     const { data: tr } = await supabase
       .from('sim_trades')
-      .select('signal_d, fill_d, side, qty, price, fee, tax, triggers, reason')
+      .select('signal_d, fill_d, side, qty, price, fee, tax, cost_basis, triggers, reason')
       .eq('account_id', id).order('signal_d', { ascending: true })
 
     const curve = (eq ?? []).map((e) => ({ d: e.d as string, retPct: Number(e.ret_pct) }))
@@ -477,6 +455,20 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
         triggers: (t.triggers as string[]) ?? [],
         reason: (t.reason as string) ?? null,
       })),
+      stats: trackStats(
+        (eq ?? []).map((e) => ({
+          d: e.d as string, cash: Number(e.cash), shares: Number(e.shares),
+          cost: Number(e.cost ?? 0), mark: Number(e.mark),
+          equity: Number(e.equity), retPct: Number(e.ret_pct),
+        })),
+        trades.map((t) => ({
+          side: t.side as 'buy' | 'sell', qty: Number(t.qty), price: Number(t.price),
+          fee: Number(t.fee), tax: Number(t.tax),
+          costBasis: t.cost_basis === null ? null : Number(t.cost_basis),
+          triggers: (t.triggers as string[]) ?? [],
+        })),
+        Number(acc.initial_cash),
+      ),
       marks: trades.map((t) => ({
         d: t.fill_d as string,
         side: t.side as 'buy' | 'sell',
