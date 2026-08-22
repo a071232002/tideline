@@ -105,3 +105,63 @@ export async function removeSymbol(formData: FormData) {
   await db.from('watchlist').delete().eq('user_id', userId).eq('symbol_id', symbolId)
   revalidatePath('/')
 }
+
+/**
+ * 改本金（PLAN §13.2）。
+ *
+ * §13.2 原本寫「改本金 = 重置該帳戶」，理由是不能等比例縮放——台股是整數股，
+ * 本金砍半不會讓股數剛好砍半。那個理由成立，但結論太重了：
+ *
+ * **成交與淨值本來就是推導出來的**（`sim/run.ts` 每次都整條重算），
+ * 真正的紀錄是規則（純函數）與 `sim_ai_log`（當天真的做過的決策）。
+ * 所以改本金只要更新金額再重建一次，derived 的部分自然是用新本金重跑的，
+ * 不是縮放的——而 AI 那幾天的判斷不必被刪掉。
+ *
+ * AI 的動作本來就是比例（`buy_50` ＝用掉一半現金），換本金重播完全成立。
+ * 刪掉它反而是把唯一不能重建的東西丟了。
+ */
+export async function setCapital(_prev: unknown, formData: FormData) {
+  const symbolId = String(formData.get('symbol_id') ?? '')
+  const raw = String(formData.get('capital') ?? '').replace(/[, ]/g, '')
+  const capital = Number(raw)
+
+  if (!symbolId) return { error: '缺少標的' }
+  if (!Number.isFinite(capital) || capital <= 0) return { error: '本金要是正數' }
+  if (capital < 1000) return { error: '本金至少 1,000 元' }
+  if (capital > 100_000_000) return { error: '本金上限 1 億元' }
+
+  const supabase = await createClient()
+  const { data: claims } = await supabase.auth.getClaims()
+  const userId = claims?.claims?.sub as string | undefined
+  if (!userId) return { error: '請先登入' }
+
+  const db = createAdminClient()
+  const { data: accounts } = await db.from('sim_accounts')
+    .select('id, currency, fx_at_open')
+    .eq('user_id', userId).eq('symbol_id', symbolId)
+  if (!accounts || accounts.length === 0) return { error: '這一檔還沒有模擬帳戶' }
+
+  for (const a of accounts) {
+    // 美股帳內記美元，本金是「建帳當日以匯率換算的台幣」——換匯率要用**當初那個**，
+    // 用今天的匯率會讓歷史淨值整條平移
+    const fx = a.fx_at_open === null ? null : Number(a.fx_at_open)
+    const initialCash = a.currency === 'TWD' ? capital : (fx && fx > 0 ? capital / fx : null)
+    if (initialCash === null) continue
+    await db.from('sim_accounts')
+      .update({ initial_twd: capital, initial_cash: initialCash })
+      .eq('id', a.id)
+  }
+
+  try {
+    // 不把 capital 傳進去——那個參數是「新帳戶的預設值」，
+    // 傳了會把這個本金套到使用者的每一檔。上面已經把這一檔的金額寫進去了，
+    // rebuildAll 會各自讀各自帳戶存的本金。
+    await rebuildAll(userId)
+  } catch (e) {
+    return { error: `重算失敗：${e instanceof Error ? e.message : String(e)}` }
+  }
+
+  invalidateAnalysis()
+  revalidatePath('/')
+  return { ok: `本金已改為 ${capital.toLocaleString('en-US')} 元，整段模擬已用新本金重算` }
+}

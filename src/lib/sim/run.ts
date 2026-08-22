@@ -210,8 +210,18 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
     const days = toRuleDays(analyses)
     const originByDate = new Map(analyses.map((a) => [a.d, a.origin]))
 
+    // **已經開過的帳戶用它自己存的本金。**
+    //
+    // `capitalTwd` 這個參數只是「新帳戶的預設值」。如果每次重建都拿它去套用到
+    // 每一檔，那麼改某一檔的本金就會靜悄悄改掉其他每一檔——而且沒有任何提示，
+    // 使用者只會看到別檔的報酬率莫名其妙變了。
+    const { data: existingAcc } = await db.from('sim_accounts')
+      .select('initial_twd').eq('user_id', userId).eq('symbol_id', sym.id)
+      .limit(1).maybeSingle()
+    const capitalForSymbol = existingAcc ? Number(existingAcc.initial_twd) : capitalTwd
+
     const { cash: initialCash, fx: fxAtOpen } =
-      initialCashFor(sym.market, capitalTwd, rateOn(fx, startedOn))
+      initialCashFor(sym.market, capitalForSymbol, rateOn(fx, startedOn))
     if (initialCash <= 0) {
       for (const t of TRACKS) {
         out.push({ code: sym.code, track: t, trades: 0, retPct: 0, daysInMarket: 0,
@@ -222,7 +232,7 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
 
     for (const track of TRACKS) {
       const accountId = await ensureAccount(userId, sym, track, {
-        capitalTwd, initialCash, fxAtOpen, startedOn,
+        capitalTwd: capitalForSymbol, initialCash, fxAtOpen, startedOn,
       })
 
       const { data: logs } = track === 'ai'

@@ -185,7 +185,7 @@ export default async function StockPage({
         </p>
       </section>
 
-      <SimCard tracks={sim} market={page.symbol.market} />
+      <SimCard tracks={sim} market={page.symbol.market} symbolId={page.symbol.id} />
 
       <ValuationCard valuation={page.valuation} market={page.symbol.market}
         code={page.symbol.code} />

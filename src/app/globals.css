@@ -969,3 +969,17 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   font-size: var(--t-micro); color: var(--ink2); line-height: var(--lh-normal);
 }
 .revnote b { color: var(--ink); }
+
+/* 改本金。放在卡片最下面——它是設定，不是每天要看的東西。 */
+.capform {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line);
+}
+.capform label { font-size: var(--t-label); color: var(--muted); }
+.capinput { width: 120px; text-align: right; }
+.capunit { font-size: var(--t-label); color: var(--muted); }
+.capnote {
+  flex: 1 1 100%; margin: 4px 0 0;
+  font-size: var(--t-micro); color: var(--muted); line-height: var(--lh-normal);
+}
+.capform .err, .capform .okmsg { flex: 1 1 100%; margin: 4px 0 0; }

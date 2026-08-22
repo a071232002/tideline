@@ -1,5 +1,6 @@
 import type { SimTrack } from '@/lib/data'
 import { NavLink } from './NavLink'
+import { CapitalForm } from './CapitalForm'
 
 /**
  * 模擬帳戶（PLAN §13.7）。
@@ -34,7 +35,11 @@ const money = (v: number, currency: string) =>
     ? Math.round(v).toLocaleString('en-US')
     : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' | 'US' }) {
+export function SimCard({ tracks, market, symbolId }: {
+  tracks: SimTrack[]
+  market: 'TW' | 'US'
+  symbolId: string
+}) {
   if (tracks.length === 0) return null
 
   const by = (t: SimTrack['track']) => tracks.find((x) => x.track === t)
@@ -157,6 +162,8 @@ export function SimCard({ tracks, market }: { tracks: SimTrack[]; market: 'TW' |
           標準費率的 {(20 / perBatch / 0.001425).toFixed(1)} 倍）。建議至少 50,000 元。
         </p>
       )}
+
+      <CapitalForm symbolId={symbolId} current={lead.initialTwd} market={market} />
 
       <p className="fine" data-testid="sim-assumptions">
         次日開盤成交・含手續費與證交稅・未計滑價
