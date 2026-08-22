@@ -1,5 +1,5 @@
 import { getReview, type ReviewSymbol, type ReviewTrack } from '@/lib/data'
-import { GapChart, gapSeries, W_NARROW } from '@/components/GapChart'
+import { ReviewChart, gapSeries, W_NARROW } from '@/components/ReviewChart'
 import { TopBar } from '@/components/TopBar'
 import { NavLink } from '@/components/NavLink'
 import { Icon } from '@/components/Icon'
@@ -91,38 +91,10 @@ export default async function ReviewPage() {
         </div>
       ) : (
         <>
-          {/* 金額合計放這裡，不放清單。
-              每一檔的起算日不同、本金可以個別調整，加起來得到的既不是投組報酬、
-              也不是任何一段期間的報酬——但在「回顧」的脈絡下，
-              旁邊有各檔明細撐著，它就有意義了。 */}
-          {(() => {
-            let cost = 0, value = 0, n = 0
-            for (const r of withBoth) {
-              const rule = r.tracks.find((t) => t.track === 'rule')
-              if (!rule) continue
-              cost += r.initialTwd
-              value += r.initialTwd * (1 + rule.stats.retPct / 100)
-              n++
-            }
-            if (n === 0) return null
-            const p = ((value - cost) / cost) * 100
-            return (
-              <p className="revtotal" data-testid="review-total">
-                <span className="lab">全部加起來</span>
-                <span className="tnum">
-                  {Math.round(cost).toLocaleString('en-US')} →{' '}
-                  <b>{Math.round(value).toLocaleString('en-US')}</b> 元
-                </span>
-                <span className={`tnum revtotalpct ${p >= 0 ? 'chg-up' : 'chg-down'}`}>
-                  {p >= 0 ? '+' : ''}{p.toFixed(2)}%
-                </span>
-                <span className="fine">
-                  各檔起算日不同、本金可個別調整，所以這是各檔報酬的加總，
-                  不是一段期間的投組報酬。要判斷好壞請看下面每一檔的差距。
-                </span>
-              </p>
-            )
-          })()}
+          {/* 金額合計拿掉了。
+              各檔起算日不同、本金可個別調整，加起來既不是投組報酬也不是
+              任何一段期間的報酬；而且它會把注意力從「這一檔做得如何」
+              拉到一個沒有意義的總數上。每一檔分開看才是這一頁的用途。 */}
 
           <p className="revverdict" data-testid="review-verdict">
             {/* 分子分母都寫出來。§11：樣本小的時候不要只給百分比 */}
@@ -180,15 +152,24 @@ export default async function ReviewPage() {
                         </span>
                       </p>
 
-                      {/* 寬窄兩份 viewBox，用 CSS 切換。920 寬的 viewBox 塞進 375px
-                          螢幕，軸標籤實測只剩 3.6px——那不是小，是看不見。 */}
+                      {/* 一張圖兩層：上半是收盤價與買賣點（買在哪、賣在哪），
+                          下半是跟買了不動的差距（那些進出有沒有幫助）。
+                          共用一條時間軸，所以兩件事是上下對齊的。
+
+                          寬窄兩份 viewBox，用 CSS 切換——920 寬的 viewBox 塞進
+                          375px 螢幕，軸標籤實測只剩 3.6px，那不是小是看不見。 */}
                       <div className="chart-wide">
-                        <GapChart points={points} leadLabel={leadLabel} id={`w-${r.code}`} />
+                        <ReviewChart bars={r.bars} marks={lead.marks} gap={points}
+                          leadLabel={leadLabel} id={`w-${r.code}`} />
                       </div>
                       <div className="chart-narrow">
-                        <GapChart points={points} leadLabel={leadLabel}
-                          id={`n-${r.code}`} width={W_NARROW} />
+                        <ReviewChart bars={r.bars} marks={lead.marks} gap={points}
+                          leadLabel={leadLabel} id={`n-${r.code}`} width={W_NARROW} />
                       </div>
+                      <p className="gapcaption">
+                        上半是收盤價，▲買 ▼賣 標出實際成交的位置；
+                        下半是跟「買了不動」的差距，在 0 以上代表這樣做比較好。
+                      </p>
                     </>
                   )
                 })()}

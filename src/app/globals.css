@@ -1017,15 +1017,7 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   margin-right: 5px; letter-spacing: .04em;
 }
 
-/* 金額合計只出現在回顧頁，而且要說清楚它不是投組報酬 */
-.revtotal {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  padding: 12px 18px; margin: 0 0 12px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-}
-.revtotal .lab { font-size: var(--t-label); color: var(--muted); }
-.revtotalpct { font-size: var(--n-sm); font-weight: 800; }
-.revtotal .fine { flex: 1 1 100%; margin: 2px 0 0; }
+
 
 /* ------------------------------------------------- 回顧頁：一眼看得懂
  *
@@ -1057,3 +1049,24 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 .revdetails[open] summary::before { content: '−'; }
 .revdetails summary:hover { color: var(--ink); }
 .revdetails .revstats { margin-top: 6px; }
+
+/* ------------------------------------------------- 個股頁的分段標題
+ *
+ * 建議與技術分析原本是交錯的，讀者每往下一段就要切換一次心智狀態，
+ * 資訊自然顯得雜。分段之後每一段只回答一個問題，標題就是那個問題。
+ *
+ * 用一條細線加小標，不做成大標題——它是路標不是內容，不該跟數字搶注意力。
+ */
+.secttl {
+  display: flex; align-items: center; gap: 10px;
+  margin: 26px 0 10px;
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+.secttl::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
+/* 第一段緊接在狀態列下面，不需要那麼大的上緣留白 */
+main > .secttl:first-of-type { margin-top: 16px; }

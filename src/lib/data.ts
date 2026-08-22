@@ -499,6 +499,8 @@ export interface ReviewTrack {
   track: 'rule' | 'ai' | 'hold'
   curve: { d: string; retPct: number }[]
   stats: TrackStats
+  /** 這條軌道的成交點，要標在價格圖上——看得出「在哪裡買、在哪裡賣」 */
+  marks: { d: string; side: 'buy' | 'sell'; price: number; stop: boolean }[]
 }
 
 export interface ReviewSymbol {
@@ -509,6 +511,8 @@ export interface ReviewSymbol {
   currency: string
   initialTwd: number
   tracks: ReviewTrack[]
+  /** 收盤價走勢。回顧要把買賣點標在**價格**上，不是標在報酬率上 */
+  bars: { d: string; c: number }[]
   /** AI 那條有幾天沒跑到。一半以上 missing 的曲線不能拿來比較（§13.5） */
   aiMissing: number
   /**
@@ -579,7 +583,7 @@ export async function getReview(): Promise<ReviewSymbol[]> {
     .range(from, to))
   const trRows = await fetchPaged((from, to) => supabase
     .from('sim_trades')
-    .select('account_id, side, qty, price, fee, tax, cost_basis, triggers')
+    .select('account_id, fill_d, side, qty, price, fee, tax, cost_basis, triggers')
     .in('account_id', ids).order('account_id').order('signal_d').range(from, to))
   const logRows = await fetchPaged((from, to) => supabase
     .from('sim_ai_log').select('account_id, status').in('account_id', ids)
@@ -597,9 +601,18 @@ export async function getReview(): Promise<ReviewSymbol[]> {
     eqBy.set(id, list)
   }
 
+  const markBy = new Map<string, ReviewTrack['marks']>()
   const trBy = new Map<string, StatTrade[]>()
   for (const t of trRows) {
     const id = t.account_id as string
+    const marks = markBy.get(id) ?? []
+    marks.push({
+      d: t.fill_d as string,
+      side: t.side as 'buy' | 'sell',
+      price: Number(t.price),
+      stop: ((t.triggers as string[]) ?? []).includes('stop'),
+    })
+    markBy.set(id, marks)
     const list = trBy.get(id) ?? []
     list.push({
       side: t.side as 'buy' | 'sell', qty: Number(t.qty), price: Number(t.price),
@@ -618,6 +631,18 @@ export async function getReview(): Promise<ReviewSymbol[]> {
     else missingBy.set(id, (missingBy.get(id) ?? 0) + 1)
   }
 
+  // 收盤價走勢。買賣點要標在價格上——標在報酬率上看不出「買在哪個位置」
+  const barRows = await fetchPaged((from, to) => supabase
+    .from('daily_bars').select('symbol_id, d, c').in('symbol_id', symbolIds)
+    .order('symbol_id').order('d', { ascending: true }).range(from, to))
+  const barsBy = new Map<string, { d: string; c: number }[]>()
+  for (const b of barRows) {
+    const id = b.symbol_id as string
+    const list = barsBy.get(id) ?? []
+    list.push({ d: b.d as string, c: Number(b.c) })
+    barsBy.set(id, list)
+  }
+
   const bySymbol = new Map<string, ReviewSymbol>()
   for (const a of accounts) {
     const sid = a.symbol_id as string
@@ -629,15 +654,20 @@ export async function getReview(): Promise<ReviewSymbol[]> {
         name: (s.name_zh as string) ?? (s.name_en as string) ?? null,
         currency: a.currency as string,
         initialTwd: Number(a.initial_twd),
-        tracks: [], aiMissing: 0, aiDecisions: 0,
+        tracks: [], bars: [], aiMissing: 0, aiDecisions: 0,
       })
     }
     const row = bySymbol.get(sid)!
     const curve = eqBy.get(a.id as string) ?? []
+    if (row.bars.length === 0 && curve.length > 0) {
+      const from = curve[0]!.d
+      row.bars = (barsBy.get(sid) ?? []).filter((b) => b.d >= from)
+    }
     row.tracks.push({
       track: a.track as ReviewTrack['track'],
       curve: curve.map((e) => ({ d: e.d, retPct: e.retPct })),
       stats: trackStats(curve, trBy.get(a.id as string) ?? [], Number(a.initial_cash)),
+      marks: markBy.get(a.id as string) ?? [],
     })
     if (a.track === 'ai') {
       row.aiMissing = missingBy.get(a.id as string) ?? 0

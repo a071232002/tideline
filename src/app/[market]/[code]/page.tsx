@@ -128,11 +128,27 @@ export default async function StockPage({
         </p>
       )}
 
+      {/* ---------------------------------------------------------------
+          建議與技術分析要分開。
+
+          原本是交錯的：價位（建議）→ 明日動作（建議）→ 四格摘要（技術）
+          → 判斷句（技術）→ 模擬帳戶（建議的成績）→ 兩張圖（技術）。
+          讀者每往下一段就要切換一次心智狀態，資訊自然顯得雜。
+
+          分成三段，每段一個標題：**今天怎麼做 → 這些建議準不準 → 技術面依據**。
+          --------------------------------------------------------------- */}
+      <h2 className="secttl" data-testid="sect-do">今天怎麼做</h2>
+
+      {/* 明日動作放在價位之前：那是結論，價位是它的依據。
+          原本它在手機上位於第三屏（y=1604，視窗 780）。 */}
+      <SimNext track={simLead} market={page.symbol.market} />
+
       <LevelStrip levels={strip} close={close} />
 
-      {/* 決策條說「哪些價位有意義」，這一行說「所以明天開盤做什麼」——
-          兩句話是連著的。原本它在手機上位於第三屏（y=1604，視窗 780）。 */}
-      <SimNext track={simLead} market={page.symbol.market} />
+      <h2 className="secttl" data-testid="sect-check">這些建議準不準</h2>
+      <SimCard tracks={sim} market={page.symbol.market} symbolId={page.symbol.id} />
+
+      <h2 className="secttl" data-testid="sect-why">技術面依據</h2>
 
       <section className="tiles">
         <div className="tile">
@@ -185,10 +201,7 @@ export default async function StockPage({
         </p>
       </section>
 
-      <SimCard tracks={sim} market={page.symbol.market} symbolId={page.symbol.id} />
 
-      <ValuationCard valuation={page.valuation} market={page.symbol.market}
-        code={page.symbol.code} />
 
 {/* 兩種 viewBox 寬度各渲染一份，用 CSS 切換。
           920 寬的 viewBox 塞進 375px 螢幕，軸標籤實測只剩 3.6px——
@@ -222,6 +235,13 @@ export default async function StockPage({
           </div>
         ))}
       </section>
+
+      {/* 估值是**基本面**，跟上面整段技術分析不是同一件事——
+          它自己一段，才不會被當成價位的依據之一。
+          §3 也明講過：估值不參與價位計算。 */}
+      <h2 className="secttl" data-testid="sect-value">另一個角度：估值</h2>
+      <ValuationCard valuation={page.valuation} market={page.symbol.market}
+        code={page.symbol.code} />
     </main>
   )
 }
