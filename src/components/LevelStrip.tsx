@@ -61,7 +61,24 @@ export function LevelStrip({ levels, close }: { levels: StripLevel[]; close: num
   )
 }
 
-/** 觀察清單用的緊湊版：一列裡把三個價位排開，不要塞一整句散文 */
+/**
+ * 觀察清單用的緊湊版。
+ *
+ * **只給會動作的那一邊，不給整個區間。** 三個價位在清單上原本各印一段
+ * 「228.00～230.00」，三欄加起來佔掉整列的 44%（實測 404/926px），
+ * 把真正的決策資訊擠到 16%。
+ *
+ * 而區間的另一邊在清單上是用不到的：
+ *   賣出區看**下緣**——那是第一道壓力，碰到就開始減碼
+ *   加碼區看**上緣**——回到這裡以下才進場
+ *   止跌本來就是單一價位
+ *
+ * 完整區間留在個股頁的決策條上，那裡才是要細看的地方。
+ */
+const EDGE: Record<StripLevel['kind'], 'lo' | 'hi'> = {
+  sell: 'lo', stop: 'lo', add: 'hi',
+}
+
 export function LevelInline({ levels }: { levels: StripLevel[] }) {
   if (levels.length === 0) return <span className="empty">尚無分析資料</span>
   // 固定三欄。用 flex-wrap 的話高價股（2330 約 2350）數字太長會換行，
@@ -73,12 +90,19 @@ export function LevelInline({ levels }: { levels: StripLevel[] }) {
       {(['sell', 'stop', 'add'] as const).map((k) => {
         const l = byKind(k)
         const m = META[k]
-        const range = l && l.hi !== undefined && l.hi !== l.lo
+        const edge = l ? (EDGE[k] === 'hi' && l.hi !== undefined ? l.hi : l.lo) : null
+        const isRange = l !== undefined && l.hi !== undefined && l.hi !== l.lo
         return (
           <span key={k} className="inlinecell">
             <span className="inlinelab">{m.label}</span>
-            <span className={`tnum ${m.cls}`} style={{ fontWeight: 700 }}>
-              {l ? `${money(l.lo)}${range ? `～${money(l.hi!)}` : ''}` : '—'}
+            <span className={`tnum ${m.cls}`} style={{ fontWeight: 700 }}
+              /* 有區間時把完整範圍放進 title，滑過去看得到，
+                 但不佔版面 */
+              title={isRange ? `${money(l!.lo)}～${money(l!.hi!)}` : undefined}>
+              {edge === null ? '—' : money(edge)}
+              {isRange && <span className="edgemark" aria-hidden="true">
+                {EDGE[k] === 'lo' ? '↑' : '↓'}
+              </span>}
             </span>
           </span>
         )

@@ -71,21 +71,17 @@ export function WatchList({
   }, [rows])
 
   /**
-   * 合計。**跨市場只有換成同一個幣別才加得起來**，所以美股用最新匯率換台幣；
-   * 匯率缺漏時那一檔不計入，並在畫面上說明少算了幾檔——寧可少算也不要
-   * 用一個猜的匯率湊出一個看起來很完整的數字。
+   * 清單頂上這一條講的是**今天要做什麼**，不是總報酬。
+   *
+   * 原本這裡放跨標的的金額合計。拿掉的理由不是版面，是那個數字不誠實：
+   * 每一檔的起算日不同（各自從加入追蹤那天算）、本金可以個別調整，
+   * 把它們加起來得到的既不是投組報酬、也不是任何一段期間的報酬，
+   * 只是一堆不同尺規的數字相加。要看整體請到回顧頁，那裡分得開。
    */
-  const total = useMemo(() => {
-    let cost = 0, value = 0, skipped = 0, n = 0
-    for (const r of rows) {
-      if (!r.sim) continue
-      if (r.sim.equityTwd === null) { skipped++; continue }
-      cost += r.sim.initialTwd
-      value += r.sim.equityTwd
-      n++
-    }
-    if (n === 0) return null
-    return { cost, value, pct: ((value - cost) / cost) * 100, n, skipped }
+  const summary = useMemo(() => {
+    const withSim = rows.filter((r) => r.sim)
+    const aiLed = withSim.filter((r) => r.sim!.lead === 'ai').length
+    return { n: withSim.length, aiLed }
   }, [rows])
 
   // `pending` 不動作時也存在（要帶「為什麼不做」的理由），所以一律看 buy/sell。
@@ -116,24 +112,17 @@ export function WatchList({
         </div>
       </div>
 
-      {total && (
+      {summary.n > 0 && (
         <div className="simtotal" data-testid="sim-total">
           <div className="simtotalmain">
-            <span className="lab">照建議做的話</span>
-            <span className="tnum">
-              {Math.round(total.cost).toLocaleString('en-US')} →{' '}
-              <b>{Math.round(total.value).toLocaleString('en-US')}</b> 元
-            </span>
-            <span className={`tnum simtotalpct ${total.pct >= 0 ? 'chg-up' : 'chg-down'}`}>
-              {total.pct >= 0 ? '+' : ''}{total.pct.toFixed(2)}%
+            <span className="lab">明天開盤</span>
+            <span className={`simtotalpct ${todoCount > 0 ? 'chg-up' : ''}`}>
+              {todoCount > 0 ? `${todoCount} 檔要動作` : '沒有要動作的'}
             </span>
           </div>
           <span className="fine">
-            {total.n} 檔
-            {total.skipped > 0 && `（${total.skipped} 檔缺匯率未計入）`}
-            {todoCount > 0 ? `・明日有 ${todoCount} 檔要動作` : '・明日無動作'}
-            {/* 回顧的入口就放在合計旁邊——看到總報酬之後，
-                下一個問題一定是「所以這套規則到底行不行」 */}
+            {summary.n} 檔在模擬
+            {summary.aiLed > 0 ? `・${summary.aiLed} 檔由 AI 判斷` : '・AI 尚未開始'}
             <NavLink href="/review" className="revlink" data-testid="review-link">
               回顧 →
             </NavLink>
@@ -253,7 +242,10 @@ export function WatchList({
                       </div>
                     ) : (
                       <>
+                        {/* 這個數字是哪一條軌道的，一定要標出來——
+                            同一個位置在不同標的上可能代表不同軌道 */}
                         <div className={`rsimret tnum ${r.sim.retPct >= 0 ? 'chg-up' : 'chg-down'}`}>
+                          <span className="rsimwho">{r.sim.lead === 'ai' ? 'AI' : '規則'}</span>
                           {pct(r.sim.retPct)}
                         </div>
                         <div className="rsimsub tnum">
@@ -261,6 +253,10 @@ export function WatchList({
                             {pct(r.sim.excessPct)}
                           </span>
                         </div>
+                        {/* AI 當主角時，規則降成參考 */}
+                        {r.sim.lead === 'ai' && (
+                          <div className="rsimsub tnum">規則 {pct(r.sim.ruleRetPct)}</div>
+                        )}
                       </>
                     )}
 

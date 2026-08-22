@@ -50,6 +50,16 @@ export interface WatchRow {
     days: number
     /** AI 今天的決策。這是這個站的主角，不該只出現在第二層 */
     aiToday: { d: string; action: string; confidence: string | null; reason: string | null } | null
+    /**
+     * 哪一條軌道是主角。
+     *
+     * **AI 開始判斷之後就以 AI 為準**（PLAN §13.5：AI 帳戶是主角，規則是對照）。
+     * 還沒開始的時候退回規則，並且畫面要標出來——同一個位置在不同標的上
+     * 代表不同軌道，不講清楚就是誤導。
+     */
+    lead: 'ai' | 'rule'
+    /** 規則軌道的報酬率。lead 是 AI 時，這個降級成小字參考 */
+    ruleRetPct: number
     currency: string
     /** 明日動作的理由，或「今天為什麼不做」 */
     /** 換算成台幣的現值與本金，用來算跨市場的合計 */
@@ -204,17 +214,26 @@ export async function getWatchlist(): Promise<WatchRow[]> {
     const hold = holdAcc ? lastEquity.get(holdAcc.id as string) : undefined
     const aiAcc = (accounts ?? []).find(
       (x) => x.symbol_id === symbolId && x.track === 'ai')
+    const aiEq = aiAcc ? lastEquity.get(aiAcc.id as string) : undefined
+    const ai = aiAcc ? (aiToday.get(aiAcc.id as string) ?? null) : null
+
+    // AI 一旦開始判斷就由它當主角。還沒開始才退回規則。
+    const lead = ai !== null && aiEq ? 'ai' as const : 'rule' as const
+    const main = lead === 'ai' ? aiEq! : rule
+
     const cur = a.currency as string
     simBySymbol.set(symbolId, {
-      cost: rule.cost,
+      cost: main.cost,
       startedOn: a.started_on as string,
       days: dayCount.get(a.id as string) ?? 0,
-      aiToday: aiAcc ? (aiToday.get(aiAcc.id as string) ?? null) : null,
-      retPct: rule.retPct,
-      excessPct: hold ? rule.retPct - hold.retPct : 0,
-      shares: rule.shares,
+      aiToday: ai,
+      lead,
+      ruleRetPct: rule.retPct,
+      retPct: main.retPct,
+      excessPct: hold ? main.retPct - hold.retPct : 0,
+      shares: main.shares,
       currency: cur,
-      equityTwd: cur === 'TWD' ? rule.equity : (fx !== null ? rule.equity * fx : null),
+      equityTwd: cur === 'TWD' ? main.equity : (fx !== null ? main.equity * fx : null),
       initialTwd: Number(a.initial_twd),
       pending: (a.pending as WatchRow['sim'] extends null ? never
         : NonNullable<WatchRow['sim']>['pending']) ?? null,

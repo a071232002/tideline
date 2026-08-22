@@ -330,7 +330,10 @@ a { color: inherit; }
 /* 清單列在窄螢幕改成堆疊，桌機維持一列 */
 .row {
   display: grid;
-  grid-template-columns: 124px 120px minmax(0, 1fr) 150px auto;
+  /* 價位欄改成固定寬，彈性空間留給決策欄。
+     原本價位是 1fr，會把剩餘寬度全部吸走——三個數字用不到 336px，
+     而旁邊的 AI 決策、投入金額、起算日才是真正需要空間的東西。 */
+  grid-template-columns: 150px 126px 264px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
   padding: 14px 18px;
@@ -624,7 +627,7 @@ a { color: inherit; }
 /* 清單表頭：價位標籤放這裡，列裡就不必每列重複三次 */
 .listhead {
   display: grid;
-  grid-template-columns: 124px 120px minmax(0, 1fr) 150px auto;
+  grid-template-columns: 150px 126px 264px minmax(0, 1fr) auto;
   gap: 12px;
   padding: 0 18px 8px;
 }
@@ -1001,3 +1004,24 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   color: var(--card); background: var(--mid);
   border-radius: 4px; padding: 1px 5px;
 }
+
+/* 區間只印會動作的那一邊，箭頭表示另一邊在上還是在下。
+   完整範圍在 title 裡，滑過去看得到，不佔版面。 */
+.edgemark { font-size: .72em; opacity: .5; margin-left: 1px; }
+
+/* 這個數字是哪一條軌道的，一定要標出來——同一個位置在不同標的上
+   可能是 AI，也可能是規則。 */
+.rsimwho {
+  font-size: var(--t-micro); font-weight: 700; color: var(--muted);
+  margin-right: 5px; letter-spacing: .04em;
+}
+
+/* 金額合計只出現在回顧頁，而且要說清楚它不是投組報酬 */
+.revtotal {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 12px 18px; margin: 0 0 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+}
+.revtotal .lab { font-size: var(--t-label); color: var(--muted); }
+.revtotalpct { font-size: var(--n-sm); font-weight: 800; }
+.revtotal .fine { flex: 1 1 100%; margin: 2px 0 0; }

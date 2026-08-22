@@ -82,6 +82,39 @@ export default async function ReviewPage() {
         </div>
       ) : (
         <>
+          {/* 金額合計放這裡，不放清單。
+              每一檔的起算日不同、本金可以個別調整，加起來得到的既不是投組報酬、
+              也不是任何一段期間的報酬——但在「回顧」的脈絡下，
+              旁邊有各檔明細撐著，它就有意義了。 */}
+          {(() => {
+            let cost = 0, value = 0, n = 0
+            for (const r of withBoth) {
+              const rule = r.tracks.find((t) => t.track === 'rule')
+              if (!rule) continue
+              cost += r.initialTwd
+              value += r.initialTwd * (1 + rule.stats.retPct / 100)
+              n++
+            }
+            if (n === 0) return null
+            const p = ((value - cost) / cost) * 100
+            return (
+              <p className="revtotal" data-testid="review-total">
+                <span className="lab">全部加起來</span>
+                <span className="tnum">
+                  {Math.round(cost).toLocaleString('en-US')} →{' '}
+                  <b>{Math.round(value).toLocaleString('en-US')}</b> 元
+                </span>
+                <span className={`tnum revtotalpct ${p >= 0 ? 'chg-up' : 'chg-down'}`}>
+                  {p >= 0 ? '+' : ''}{p.toFixed(2)}%
+                </span>
+                <span className="fine">
+                  各檔起算日不同、本金可個別調整，所以這是各檔報酬的加總，
+                  不是一段期間的投組報酬。要判斷好壞請看下面每一檔的差距。
+                </span>
+              </p>
+            )
+          })()}
+
           <p className="revverdict" data-testid="review-verdict">
             {/* 分子分母都寫出來。§11：樣本小的時候不要只給百分比 */}
             <b className="tnum">{withBoth.length} 檔裡 {beat} 檔</b>
