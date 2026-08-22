@@ -30,7 +30,10 @@ function money(v: number): string {
 export function LevelStrip({ levels, close }: { levels: StripLevel[]; close: number | null }) {
   if (levels.length === 0) return null
 
+  const whys = levels.filter((l) => l.why)
+
   return (
+    <>
     <section className="strip" data-testid="level-strip" aria-label="關鍵價位">
       {levels.map((l) => {
         const m = META[l.kind]
@@ -54,11 +57,30 @@ export function LevelStrip({ levels, close }: { levels: StripLevel[]; close: num
                 </span>
               )}
             </div>
-            {l.why && <p className="stripwhy">{l.why}</p>}
+            {/* 「為什麼」在桌機留在卡內，手機收到下面的摺疊區——
+                手機上三段理由佔 144px，而決策條整個已經吃掉第一屏的 65%。
+                它必須留著（是使用者要求的），但不必永遠攤開。 */}
+            {l.why && <p className="stripwhy wide-only">{l.why}</p>}
           </div>
         )
       })}
     </section>
+
+    {/* 手機專用：三段理由收成一個摺疊區。桌機那邊卡內已經有了，不重複。 */}
+    {whys.length > 0 && (
+      <details className="stripwhys narrow-only" data-testid="strip-whys">
+        <summary>為什麼是這些價位</summary>
+        <dl>
+          {whys.map((l) => (
+            <div key={l.kind}>
+              <dt className={META[l.kind].cls}>{META[l.kind].label}</dt>
+              <dd>{l.why}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+    )}
+    </>
   )
 }
 

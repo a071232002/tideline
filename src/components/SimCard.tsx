@@ -115,6 +115,7 @@ export function SimCard({ tracks, market, symbolId }: {
         {excess >= 0
           ? `照建議進出，比買了不動多賺 ${excess.toFixed(2)}%。`
           : `照建議進出，反而比買了不動少賺 ${Math.abs(excess).toFixed(2)}%。`}
+        {aiLive || !ai ? '' : '　AI 那條還沒開始。'}
       </p>
 
       <dl className="simstats tnum">
@@ -164,8 +165,11 @@ export function SimCard({ tracks, market, symbolId }: {
       {/* 細部統計收進摺疊區。它們回答「為什麼會這樣」，是第二層問題——
           攤開來會讓讀者先花力氣找重點。原本這些在 /review，
           但那一頁只是把同一件事再畫一次，反而要在頁面之間換算日期。 */}
+      {/* 細節與設定共用一個摺疊區。
+          本金是**設定**，不是每天要讀的東西——它攤開來佔 89px，
+          而這張卡在手機上已經是最大的一塊（657px）。 */}
       <details className="revdetails">
-        <summary>更多數字</summary>
+        <summary>更多數字與設定</summary>
         <dl className="revstats">
           <div><dt>中途最多虧</dt>
             <dd className="tnum">−{lead.stats.maxDrawdownPct.toFixed(2)}%</dd></div>
@@ -176,16 +180,20 @@ export function SimCard({ tracks, market, symbolId }: {
             </dd></div>
           <div><dt>觸發停損</dt><dd className="tnum">{lead.stats.stopped} 次</dd></div>
           <div><dt>買了不動</dt><dd className="tnum">{pct(hold.retPct)}</dd></div>
+          {market === 'TW' && (
+            <div><dt>股利稅負</dt><dd className="tnum">未計入</dd></div>
+          )}
         </dl>
+        <CapitalForm symbolId={symbolId} current={lead.initialTwd} market={market} />
       </details>
 
-      <CapitalForm symbolId={symbolId} current={lead.initialTwd} market={market} />
-
+      {/* §13.9：假設一定要揭露，這一段不能收起來。
+          但「未扣股利所得稅與二代健保」是細節的細節，
+          而「AI 軌道尚未開始」是狀態不是假設——前者移進摺疊區，後者上移到結論那句。 */}
       <p className="fine" data-testid="sim-assumptions">
         次日開盤成交・含手續費與證交稅・未計滑價
-        {market === 'TW' ? '・以零股計算・配息以現金入帳（未扣股利所得稅與二代健保）' : '・允許小數股'}
+        {market === 'TW' ? '・以零股計算・配息以現金入帳' : '・允許小數股'}
         ・樣本 {rule.totalDays} 個交易日・<b>不代表實際可獲得之報酬</b>
-        {aiLive || !ai ? '' : '・AI 軌道尚未開始（不回補）'}
       </p>
     </section>
   )

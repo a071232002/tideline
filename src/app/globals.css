@@ -37,6 +37,12 @@
      一條是指標（現在在哪），一條是動作價位（跌破要反應），意義完全不同。 */
   --mid: #7a5cc4;
   --sell: #c22f2f;   /* 5.33:1 */
+  /* 徽章文字專用：色票**疊在自己的淡色底上**時對比會掉。
+     實測 --sell 在 9% 淡底上只有 4.02:1（一般文字要 4.5）。
+     線條與圖上的用途不受影響，那些是非文字元素，門檻是 3:1。 */
+  --sell-ink: #a82929;   /* 4.99:1 on tinted bg，留一點餘裕 */
+  --stop-ink: #9a490f;   /* 4.58:1 */
+  --buy-ink:  #17683a;   /* 4.85:1 */
   /* 原本 #cf6316 對紙色底只有 3.66:1，而「止跌」那個標籤是 13px——
      不到大字的門檻，要 4.5:1。壓深一階到 5.0:1，圖上的線幾乎看不出差別。 */
   --stop: #ad5211;   /* 5.00:1 */
@@ -73,6 +79,11 @@
     --sell: #ef7676;
     --stop: #e08a4a;
     --buy: #4fbb7a;
+    /* 深色底上的淡色字本來就夠亮，不需要另一組——但一定要**明確定義**，
+       否則會掉回淺色的深紅，在深底上變成看不見的暗字 */
+    --sell-ink: #ef7676;
+    --stop-ink: #e08a4a;
+    --buy-ink: #4fbb7a;
     --up: #f0665f;
     --down: #4bb56f;
     --bandfill: rgba(91, 157, 240, .13);
@@ -98,6 +109,9 @@
   --sell: #ef7676;
   --stop: #e08a4a;
   --buy: #4fbb7a;
+  --sell-ink: #ef7676;
+  --stop-ink: #e08a4a;
+  --buy-ink: #4fbb7a;
   --up: #f0665f;
   --down: #4bb56f;
   --bandfill: rgba(91, 157, 240, .13);
@@ -174,6 +188,15 @@ body {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px; margin: 18px 0;
 }
+/* 手機上四格各佔 117px、疊成 469px。
+   它們是**技術面依據**，是要對照時才看的參考值——用兩欄排，
+   高度砍半，資訊一個都沒少。200px 的最小寬在 375px 螢幕下只能排一欄，
+   所以這裡要明確覆寫。 */
+@media (max-width: 560px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile { padding: 10px 12px; }
+  .tile .val { font-size: var(--n-sm); }
+}
 .tile {
   background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   padding: 14px 16px; box-shadow: var(--shadow);
@@ -224,9 +247,13 @@ body {
   .lvl .price { font-size: var(--n-sm); }
 }
 
-.sellc { color: var(--sell); }
-.stopc { color: var(--stop); }
-.buyc { color: var(--buy); }
+/* 這三個是**文字**用色，要走 ink 版。
+   --stop 的 #ad5211 在頁面底色上只有 4.30:1（卡片底上 5.00 才勉強過），
+   同一個 class 用在卡內與卡外，就會有一邊不合格。線條與圖形不受影響，
+   那些是非文字元素，門檻是 3:1。 */
+.sellc { color: var(--sell-ink); }
+.stopc { color: var(--stop-ink); }
+.buyc { color: var(--buy-ink); }
 
 h1 {
   font-size: var(--t-title);
@@ -431,12 +458,15 @@ a { color: inherit; }
   font-weight: 700;
 }
 .filtertag:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+/* **不要用 opacity 調文字。** .7 的 --muted 實際等於 #908c80，
+   對比 2.75:1——遠低於 4.5。透明度是對比殺手，而且用色票看不出來，
+   得把它算進去才發現。這跟 --faint 那次是同一個教訓。 */
 .filtercount {
   font-size: var(--t-micro);
-  opacity: .7;
+  color: var(--muted);
   font-weight: 600;
 }
-.filtertag.on .filtercount { opacity: .85; }
+.filtertag.on .filtercount { color: inherit; }
 
 /* 清單列的小字層級 */
 .rname { font-size: var(--t-micro); color: var(--ink2); margin-top: 3px; }
@@ -499,9 +529,9 @@ a { color: inherit; }
 }
 .inlinecell { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
 .inlineval { font-weight: 700; }
-.sellc .inlineval { color: var(--sell); }
-.stopc .inlineval { color: var(--stop); }
-.buyc .inlineval { color: var(--buy); }
+.sellc .inlineval { color: var(--sell-ink); }
+.stopc .inlineval { color: var(--stop-ink); }
+.buyc .inlineval { color: var(--buy-ink); }
 /* 四位數的高價股（2330 的 2,445.00～2,470.00）在三分之一欄寬裡放不下。
    允許折行——溢出去疊到隔壁欄比換行難讀得多（實測截圖才看得出來）。 */
 .inlinecell > .tnum { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
@@ -519,9 +549,9 @@ a { color: inherit; }
   border: 1px solid currentColor;
   white-space: nowrap;
 }
-.tone-sell { color: var(--sell); background: color-mix(in srgb, var(--sell) 9%, transparent); }
-.tone-stop { color: var(--stop); background: color-mix(in srgb, var(--stop) 9%, transparent); }
-.tone-buy  { color: var(--buy);  background: color-mix(in srgb, var(--buy) 10%, transparent); }
+.tone-sell { color: var(--sell-ink); background: color-mix(in srgb, var(--sell) 9%, transparent); }
+.tone-stop { color: var(--stop-ink); background: color-mix(in srgb, var(--stop) 9%, transparent); }
+.tone-buy  { color: var(--buy-ink);  background: color-mix(in srgb, var(--buy) 10%, transparent); }
 
 .pagestatus {
   display: inline-block;
@@ -536,7 +566,7 @@ a { color: inherit; }
 /* 全域資料狀態 */
 .freshness { font-size: var(--t-micro); letter-spacing: .02em; }
 .freshness.tone-warn {
-  color: var(--sell);
+  color: var(--sell-ink);
   font-weight: 700;
   border: 1px solid currentColor;
   border-radius: 99px;
@@ -685,6 +715,24 @@ a { color: inherit; }
 /* 所有按鈕都不換行——中文按鈕一旦換行就會變成直式的方塊 */
 .btn, .segbtn, .filtertag, .sorttag, .themebtn, .addtoggle {
   white-space: nowrap;
+}
+
+/* 觸控目標一律至少 44px 高。
+ *
+ * WCAG 2.2 SC 2.5.8 的下限是 24×24，Apple HIG 與 Material 是 44/48。
+ * 頂欄那幾顆先前修過，但清單上的市場切換、篩選頁籤、排序、加入、圖層開關、
+ * 改本金、輸入框從來沒被量到——實測 15 個不合格，最矮的只有 31px。
+ * 手機上按不準的按鈕不是小瑕疵，是功能用不了。
+ *
+ * 只撐高度不改字級與內距，密度看起來幾乎沒變。
+ */
+.segbtn, .filtertag, .sorttag, .btn, .addtoggle, .layerbtn, .input,
+.capinput, .revdetails summary {
+  min-height: 44px;
+}
+/* 這些是 inline 元素，min-height 要有 flex 或 inline-flex 才生效 */
+.segbtn, .filtertag, .sorttag, .btn, .addtoggle, .layerbtn {
+  display: inline-flex; align-items: center; justify-content: center;
 }
 
 .freshgroup { display: inline-flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -1083,7 +1131,7 @@ main > .secttl:first-of-type { margin-top: 16px; }
 .layerbtn {
   appearance: none; font: inherit; font-size: var(--t-label); cursor: pointer;
   border: 1px solid var(--line); background: var(--bg); color: var(--ink2);
-  border-radius: 99px; padding: 6px 12px; min-height: 36px; white-space: nowrap;
+  border-radius: 99px; padding: 6px 14px; white-space: nowrap;
 }
 .layerbtn:hover { color: var(--ink); border-color: var(--muted); }
 .layerbtn.on {
@@ -1094,3 +1142,25 @@ main > .secttl:first-of-type { margin-top: 16px; }
 /* 主圖的卡片：圖是主體，不要被卡片的留白吃掉太多 */
 .chartcard { padding: 14px 16px; }
 .gappanel { margin-top: 4px; }
+
+/* 只在窄螢幕顯示。`.wide-only` 的另一半——先前只有「寬才顯示」，
+   現在也需要「窄才顯示」。 */
+.narrow-only { display: none; }
+@media (max-width: 560px) { .narrow-only { display: block; } }
+
+/* 手機上把三段「為什麼」收成一個摺疊區。理由要留著（是使用者要求的），
+   但攤開時佔 144px，而決策條已經吃掉第一屏的 65%。 */
+.stripwhys {
+  margin: 10px 0 0; padding: 0 2px;
+  font-size: var(--t-micro);
+}
+.stripwhys summary {
+  cursor: pointer; color: var(--muted); list-style: none;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px;
+}
+.stripwhys summary::-webkit-details-marker { display: none; }
+.stripwhys summary::before { content: '＋'; }
+.stripwhys[open] summary::before { content: '−'; }
+.stripwhys dl { margin: 0 0 8px; }
+.stripwhys dt { font-weight: 700; margin-top: 8px; }
+.stripwhys dd { margin: 2px 0 0; color: var(--ink2); line-height: var(--lh-normal); }
