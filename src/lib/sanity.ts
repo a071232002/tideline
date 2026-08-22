@@ -27,6 +27,7 @@ export type IssueKind =
   | 'pctb'        // %b 與三軌對不起來
   | 'kd'          // K/D 跑出 0–100
   | 'orphan'      // 有分析、但沒有對應的 K 棒
+  | 'fixture-skip' // fixture 模式略過，以免覆蓋真實資料
 
 export interface Issue {
   code: string

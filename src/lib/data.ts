@@ -42,6 +42,14 @@ export interface WatchRow {
     retPct: number
     excessPct: number
     shares: number
+    /** 已投入的成本（含買進手續費）。0 代表目前空手 */
+    cost: number
+    /** 從哪一天開始追蹤這一檔。帳戶就是從這天起算 */
+    startedOn: string
+    /** 帳戶已經跑了幾個交易日。太短的時候不要拿報酬率出來說嘴 */
+    days: number
+    /** AI 今天的決策。這是這個站的主角，不該只出現在第二層 */
+    aiToday: { d: string; action: string; confidence: string | null; reason: string | null } | null
     currency: string
     /** 明日動作的理由，或「今天為什麼不做」 */
     /** 換算成台幣的現值與本金，用來算跨市場的合計 */
@@ -137,24 +145,48 @@ export async function getWatchlist(): Promise<WatchRow[]> {
   // 只讀得到自己的（實測第二個帳號打開同一頁完全看不到，見 e2e）。
   const { data: accounts } = await supabase
     .from('sim_accounts')
-    .select('id, symbol_id, track, initial_twd, initial_cash, currency, pending')
+    .select('id, symbol_id, track, initial_twd, initial_cash, currency, pending, started_on')
     .in('symbol_id', ids)
 
   const accIds = (accounts ?? []).map((a) => a.id as string)
-  const lastEquity = new Map<string, { equity: number; shares: number; retPct: number }>()
+  const lastEquity = new Map<string, {
+    equity: number; shares: number; retPct: number; cost: number
+  }>()
+  const dayCount = new Map<string, number>()
   if (accIds.length > 0) {
     // 只要每個帳戶最新的那一列。**不能不分頁**——這張表的總列數會超過
     // PostgREST 的 1000 列預設上限，而截斷不會有任何錯誤訊息（見 fetchPaged）。
     // 這裡先按帳戶、再按日期倒序，所以每個帳戶的第一列就是最新的。
     const eq = await fetchPaged((from, to) => supabase
-      .from('sim_equity').select('account_id, d, equity, shares, ret_pct')
+      .from('sim_equity').select('account_id, d, equity, shares, cost, ret_pct')
       .in('account_id', accIds)
       .order('account_id').order('d', { ascending: false }).range(from, to))
     for (const e of eq) {
       const id = e.account_id as string
+      dayCount.set(id, (dayCount.get(id) ?? 0) + 1)
       if (lastEquity.has(id)) continue
       lastEquity.set(id, {
         equity: Number(e.equity), shares: Number(e.shares), retPct: Number(e.ret_pct),
+        cost: Number(e.cost ?? 0),
+      })
+    }
+  }
+
+  // AI 今天決定了什麼。這是這個站的主角，不該只出現在個股頁。
+  const aiIds = (accounts ?? []).filter((a) => a.track === 'ai').map((a) => a.id as string)
+  const aiToday = new Map<string, NonNullable<WatchRow['sim']>['aiToday']>()
+  if (aiIds.length > 0) {
+    const logs = await fetchPaged((from, to) => supabase
+      .from('sim_ai_log').select('account_id, d, status, action, confidence, reason')
+      .in('account_id', aiIds).eq('status', 'ok')
+      .order('account_id').order('d', { ascending: false }).range(from, to))
+    for (const l of logs) {
+      const id = l.account_id as string
+      if (aiToday.has(id)) continue
+      aiToday.set(id, {
+        d: l.d as string, action: (l.action as string) ?? 'hold',
+        confidence: (l.confidence as string) ?? null,
+        reason: (l.reason as string) ?? null,
       })
     }
   }
@@ -170,8 +202,14 @@ export async function getWatchlist(): Promise<WatchRow[]> {
     const holdAcc = (accounts ?? []).find(
       (x) => x.symbol_id === symbolId && x.track === 'hold')
     const hold = holdAcc ? lastEquity.get(holdAcc.id as string) : undefined
+    const aiAcc = (accounts ?? []).find(
+      (x) => x.symbol_id === symbolId && x.track === 'ai')
     const cur = a.currency as string
     simBySymbol.set(symbolId, {
+      cost: rule.cost,
+      startedOn: a.started_on as string,
+      days: dayCount.get(a.id as string) ?? 0,
+      aiToday: aiAcc ? (aiToday.get(aiAcc.id as string) ?? null) : null,
       retPct: rule.retPct,
       excessPct: hold ? rule.retPct - hold.retPct : 0,
       shares: rule.shares,

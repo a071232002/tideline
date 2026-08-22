@@ -19,6 +19,16 @@ function money(v: number | null): string {
   return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** 金額用整數就好，清單放不下小數，也不需要 */
+const money0 = (v: number) => Math.round(v).toLocaleString('en-US')
+
+/** AI 今天決定了什麼，用白話寫。`buy_50` 這種內部代號不能直接端上桌 */
+const AI_ACTION: Record<string, string> = {
+  hold: '觀望',
+  buy_25: '買進 ¼ 現金', buy_50: '買進 ½ 現金', buy_100: '全部買進',
+  sell_25: '賣出 ¼ 持股', sell_50: '賣出 ½ 持股', sell_100: '全部賣出',
+}
+
 const SORTS: { key: SortMode; label: string }[] = [
   { key: 'attention', label: '該注意的' },
   { key: 'sim', label: '報酬' },
@@ -220,19 +230,41 @@ export function WatchList({
                         {todoLabel(r.sim.pending)}
                       </span>
                     )}
-                    <div className={`rsimret tnum ${r.sim.retPct >= 0 ? 'chg-up' : 'chg-down'}`}>
-                      {pct(r.sim.retPct)}
+                    {/* AI 今天的判斷放最上面——它是這個站的主角，
+                        不該只出現在點進去之後的第二層 */}
+                    <div className="rsimai" data-testid={`ai-${r.code}`}>
+                      {r.sim.aiToday
+                        ? <><span className="rsimailab">AI</span>{' '}
+                          {AI_ACTION[r.sim.aiToday.action] ?? r.sim.aiToday.action}</>
+                        : <span className="rsimsub">AI 尚未判斷</span>}
                     </div>
-                    {/* 報酬率自己不能回答「準不準」——旁邊一定要有超額 */}
-                    {/* 「超額」是行話。這裡要說的是「跟買了不動比，差多少」 */}
+
+                    {/* 投入多少錢比報酬率更早該回答——0% 可能是空手，也可能是真的沒賺 */}
                     <div className="rsimsub tnum">
-                      vs 不動 <span className={r.sim.excessPct >= 0 ? 'chg-up' : 'chg-down'}>
-                        {pct(r.sim.excessPct)}
-                      </span>
+                      {r.sim.cost > 0
+                        ? `投入 ${money0(r.sim.cost)}`
+                        : `現金 ${money0(r.sim.initialTwd)}`}
                     </div>
-                    <div className="rsimsub">
-                      {r.sim.shares > 0 ? '目前有股票' : '目前是現金'}
-                    </div>
+
+                    {/* 追蹤天數太少時，報酬率是雜訊不是結果，不要讓它當主角 */}
+                    {r.sim.days < 10 ? (
+                      <div className="rsimsub" data-testid={`young-${r.code}`}>
+                        追蹤 {r.sim.days} 天，太短
+                      </div>
+                    ) : (
+                      <>
+                        <div className={`rsimret tnum ${r.sim.retPct >= 0 ? 'chg-up' : 'chg-down'}`}>
+                          {pct(r.sim.retPct)}
+                        </div>
+                        <div className="rsimsub tnum">
+                          vs 不動 <span className={r.sim.excessPct >= 0 ? 'chg-up' : 'chg-down'}>
+                            {pct(r.sim.excessPct)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="rsimsub">自 {r.sim.startedOn.slice(5)}</div>
                   </>
                 ) : (
                   <span className="rsimsub">還沒開始模擬</span>

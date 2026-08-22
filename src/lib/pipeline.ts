@@ -98,9 +98,39 @@ export async function fetchBars(
  * 全部用 upsert，重跑不會壞。抓不到就丟錯，讓上層寫進 job_runs，
  * **絕不寫空資料或猜的數字**——頁面顯示「資料未更新」比顯示錯的數字安全（PLAN §9）。
  */
+/**
+ * fixture 模式**絕對不能碰已經有真實資料的標的**。
+ *
+ * 2026-08-22 實測：容器 E2E 跑完之後，0050 與 2454 的 K 棒都變成 151 根、
+ * 結束於 08-19——那是 fixture 的長度與結束日。真實的 08-20、08-21 被
+ * 「刪掉比最新一根還新的資料」那段清掉了，而 2454 的價格整條變成 0050 的。
+ *
+ * `daily_analysis` 依 §11 永不刪除，於是留下兩天沒有 K 棒撐著的孤兒列——
+ * 那個孤兒問題我先前只修了症狀（頁面忽略它們），根因就在這裡。
+ *
+ * E2E 與正式資料共用同一個資料庫是架構問題，真正的解是分開；在那之前，
+ * 這道閘門保證測試資料只會流向**還沒有真實資料**的標的。
+ */
+async function fixtureWouldClobber(symbolId: string): Promise<boolean> {
+  if (process.env.TIDELINE_FIXTURE !== '1') return false
+  const db = createAdminClient()
+  const { data } = await db.from('daily_bars')
+    .select('d').eq('symbol_id', symbolId).neq('src', 'fixture').limit(1)
+  return (data ?? []).length > 0
+}
+
 export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
   const db = createAdminClient()
   try {
+    if (await fixtureWouldClobber(sym.id)) {
+      return {
+        code: sym.code, ok: true, bars: 0,
+        issues: [{
+          code: sym.code, kind: 'fixture-skip',
+          detail: 'fixture 模式：這一檔已經有真實資料，略過以免覆蓋',
+        }],
+      }
+    }
     const { bars, name, currency, dividends, splits } =
       await fetchBars(sym.market, sym.code, sym.yahoo_symbol)
     if (bars.length === 0) throw new Error('來源沒有回傳任何 K 棒')
@@ -130,7 +160,9 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
       o: b.o, h: b.h, l: b.l, c: b.c, v: b.v,
       o_adj: b.o_adj, h_adj: b.h_adj, l_adj: b.l_adj, c_adj: b.c_adj,
       adj_factor: b.adj_factor,
-      src: sym.market === 'TW' ? 'twse' : 'yahoo',
+      // fixture 的資料要標得出來，否則之後分不清哪幾根是測試寫進去的
+      src: process.env.TIDELINE_FIXTURE === '1' ? 'fixture'
+        : sym.market === 'TW' ? 'twse' : 'yahoo',
     }))
     const { error: barErr } = await db.from('daily_bars').upsert(rows)
     if (barErr) throw new Error(`寫入 daily_bars 失敗：${barErr.message}`)
@@ -186,8 +218,11 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
     }
 
     // daily_bars 只留 KEEP_BARS 根；daily_analysis 一列都不刪（PLAN §11）
+    // **fixture 模式不做任何刪除**——它的視窗比真實資料短，刪起來會把真的資料
+    // 一起帶走（實測就是這樣弄丟 0050 的 08-20、08-21）。
+    const cleanup = process.env.TIDELINE_FIXTURE !== '1'
     const cutoff = kept[0]?.date
-    if (cutoff) {
+    if (cleanup && cutoff) {
       await db.from('daily_bars').delete().eq('symbol_id', sym.id).lt('d', cutoff)
     }
 
@@ -195,7 +230,7 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
     // 已經不再提供的那一根**——實測就發生過：盤中抓到一根還沒收盤的美股 K 棒，
     // 抓取邏輯修好之後那根仍然躺在資料庫裡，讓頁面顯示錯的收盤日。
     const newest = kept[kept.length - 1]?.date
-    if (newest) {
+    if (cleanup && newest) {
       await db.from('daily_bars').delete().eq('symbol_id', sym.id).gt('d', newest)
     }
 

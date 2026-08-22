@@ -330,7 +330,7 @@ a { color: inherit; }
 /* 清單列在窄螢幕改成堆疊，桌機維持一列 */
 .row {
   display: grid;
-  grid-template-columns: 132px 128px minmax(0, 1fr) 104px auto;
+  grid-template-columns: 124px 120px minmax(0, 1fr) 150px auto;
   gap: 12px;
   align-items: start;
   padding: 14px 18px;
@@ -624,7 +624,7 @@ a { color: inherit; }
 /* 清單表頭：價位標籤放這裡，列裡就不必每列重複三次 */
 .listhead {
   display: grid;
-  grid-template-columns: 132px 128px minmax(0, 1fr) 104px auto;
+  grid-template-columns: 124px 120px minmax(0, 1fr) 150px auto;
   gap: 12px;
   padding: 0 18px 8px;
 }
@@ -992,3 +992,12 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   border-radius: 4px;
 }
 .chartsvg { touch-action: pan-y; }
+
+/* AI 今天的判斷。它是這個站的主角，在清單上就要看得到，
+   不是點進去才有。 */
+.rsimai { font-size: var(--t-body); font-weight: 700; color: var(--ink); }
+.rsimailab {
+  font-size: var(--t-micro); font-weight: 700; letter-spacing: .06em;
+  color: var(--card); background: var(--mid);
+  border-radius: 4px; padding: 1px 5px;
+}

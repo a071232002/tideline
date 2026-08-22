@@ -158,9 +158,15 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
   const fx = await loadFx()
 
   const { data: watched } = await db.from('watchlist')
-    .select('symbol_id').eq('user_id', userId)
+    .select('symbol_id, added_at').eq('user_id', userId)
   const ids = [...new Set((watched ?? []).map((w) => w.symbol_id as string))]
   if (ids.length === 0) return []
+
+  // 什麼時候開始追蹤這一檔。帳戶從這一天起算，見下方 startedOn 的註解。
+  const addedAt = new Map<string, string>()
+  for (const w of watched ?? []) {
+    addedAt.set(w.symbol_id as string, String(w.added_at).slice(0, 10))
+  }
 
   const { data: syms } = await db.from('symbols')
     .select('id, code, market, currency, is_etf').in('id', ids)
@@ -190,9 +196,20 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
       continue
     }
 
-    // 只從「有分析可用」的那一天開始，三條軌道一致。
-    // 買進持有若從更早開始，它會憑空多賺一段暖機期的漲幅，對照就失去意義。
-    const startedOn = analyses[0]!.d
+    /**
+     * 帳戶從**開始追蹤這一檔的那天**起算。
+     *
+     * 原本是從「有分析可用的第一天」起算，也就是資料視窗的開頭。
+     * 那會產生一個很難察覺的謊：0050 的帳戶顯示「從 2026-03-06 起、報酬 +29.32%」，
+     * 但使用者是 08-19 才把它加進清單的——**在那之前這個站根本沒有對它出過建議**，
+     * 那五個月是回測，不是帳戶。把回測的報酬掛在「如果照建議做」下面，
+     * 等於用一段你不可能參與的歷史來證明建議有效。
+     *
+     * 兩條軌道都得跟著改：買進持有若從更早開始，它會憑空多賺一段，對照就失去意義。
+     * 資料不足時往後退到有分析的第一天（剛加入的標的還沒有那麼多歷史）。
+     */
+    const trackedFrom = addedAt.get(sym.id) ?? analyses[0]!.d
+    const startedOn = trackedFrom > analyses[0]!.d ? trackedFrom : analyses[0]!.d
     const bars: Bar[] = (barRows ?? [])
       .filter((b) => (b.d as string) >= startedOn)
       .map((b) => ({
@@ -234,6 +251,9 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
       const accountId = await ensureAccount(userId, sym, track, {
         capitalTwd: capitalForSymbol, initialCash, fxAtOpen, startedOn,
       })
+      // 既有帳戶的起算日也要跟上——這個值改過定義，舊帳戶還停在舊的那天
+      await db.from('sim_accounts')
+        .update({ started_on: startedOn }).eq('id', accountId).neq('started_on', startedOn)
 
       const { data: logs } = track === 'ai'
         ? await db.from('sim_ai_log')
