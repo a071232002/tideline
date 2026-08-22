@@ -550,12 +550,21 @@ async function fetchPaged<T>(
 export async function getReview(): Promise<ReviewSymbol[]> {
   const supabase = await createClient()
 
-  // 標的另外查，不用 join——內嵌關聯會讓型別推斷崩掉，
-  // 而且這裡的資料量小到分兩次查完全不痛
-  const { data: accounts } = await supabase
+  // **只看還在清單裡的標的。**
+  //
+  // 帳戶不會因為移出清單就刪掉（那會連 sim_ai_log 一起帶走，而那是唯一
+  // 不能重建的紀錄）。但它也不該繼續出現在回顧頁：實測 dev 帳號有一個
+  // 2454 的殘留帳戶，起算日還停在舊邏輯的 2026-04-09，圖畫出來橫跨四到七月，
+  // 跟其他檔完全對不起來，看起來像資料壞掉。
+  const { data: watched } = await supabase.from('watchlist').select('symbol_id')
+  const watchedIds = new Set((watched ?? []).map((w) => w.symbol_id as string))
+  if (watchedIds.size === 0) return []
+
+  const { data: allAccounts } = await supabase
     .from('sim_accounts')
     .select('id, symbol_id, track, initial_twd, initial_cash, currency')
-  if (!accounts || accounts.length === 0) return []
+  const accounts = (allAccounts ?? []).filter((a) => watchedIds.has(a.symbol_id as string))
+  if (accounts.length === 0) return []
 
   const symbolIds = [...new Set(accounts.map((a) => a.symbol_id as string))]
   const { data: symRows } = await supabase

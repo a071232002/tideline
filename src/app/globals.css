@@ -1026,3 +1026,34 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 .revtotal .lab { font-size: var(--t-label); color: var(--muted); }
 .revtotalpct { font-size: var(--n-sm); font-weight: 800; }
 .revtotal .fine { flex: 1 1 100%; margin: 2px 0 0; }
+
+/* ------------------------------------------------- 回顧頁：一眼看得懂
+ *
+ * 原本是三條資金曲線疊在一起，要求讀者同時追兩條線、在腦裡算距離。
+ * 他要的答案只有一句：這樣做到底有沒有幫助。所以第一層只有
+ * 一個大數字 ＋ 一條差距線，其餘收進「更多數字」。
+ */
+.revanswer {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.revgap { font-size: var(--n-lg); font-weight: 800; line-height: 1.1; }
+.revanswertext { font-size: var(--t-body); color: var(--ink2); }
+
+.gapcaption {
+  margin: 6px 0 0; font-size: var(--t-micro); color: var(--muted);
+  line-height: var(--lh-normal);
+}
+.gapcaption b { color: var(--ink2); }
+
+.revdetails { margin: 12px 0 0; border-top: 1px solid var(--line); padding-top: 10px; }
+.revdetails summary {
+  cursor: pointer; font-size: var(--t-label); color: var(--muted);
+  list-style: none; display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px;
+}
+.revdetails summary::-webkit-details-marker { display: none; }
+.revdetails summary::before { content: '＋'; font-size: var(--t-micro); }
+.revdetails[open] summary::before { content: '−'; }
+.revdetails summary:hover { color: var(--ink); }
+.revdetails .revstats { margin-top: 6px; }

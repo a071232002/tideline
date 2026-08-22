@@ -1,5 +1,5 @@
 import { getReview, type ReviewSymbol, type ReviewTrack } from '@/lib/data'
-import { EquityChart } from '@/components/EquityChart'
+import { GapChart, gapSeries, W_NARROW } from '@/components/GapChart'
 import { TopBar } from '@/components/TopBar'
 import { NavLink } from '@/components/NavLink'
 import { Icon } from '@/components/Icon'
@@ -13,7 +13,10 @@ export const dynamic = 'force-dynamic'
  * §11 明講兩種心智狀態不要混在一起，所以獨立成一頁。
  *
  * 這一頁只有一個問題：**這套規則值不值得繼續相信。**
- * 所以每一區塊都以超額報酬（規則 − 買進持有）領銜，不是報酬率。
+ *
+ * 所以每一檔的第一層只有三樣東西：一個大數字（差距）、一句話（多賺還是少賺）、
+ * 一條差距線。細部統計收進「更多數字」——攤開九格會讓讀者先花力氣找重點，
+ * 而那九格回答的是「為什麼」，不是「有沒有幫助」。
  */
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
@@ -25,31 +28,37 @@ function excessOf(s: ReviewSymbol): number | null {
   return rule.stats.retPct - hold.stats.retPct
 }
 
-function Stats({ rule, hold }: { rule: ReviewTrack; hold: ReviewTrack }) {
+/**
+ * 細部數字收進摺疊區。
+ *
+ * 九格統計攤開來，在手機上佔 245px，而它們回答的是「為什麼會這樣」——
+ * 那是想深究時才需要的第二層。第一層只要回答「有沒有幫助」，
+ * 由上面那句話與差距圖負責。攤開的東西越多，讀者越要花心思找重點。
+ *
+ * 但**該說的但書不能收**：假設揭露、樣本長度那些留在外面。
+ * 收起來的是細節，不是警語。
+ */
+function Details({ rule, hold }: { rule: ReviewTrack; hold: ReviewTrack }) {
   const s = rule.stats
-  const excess = s.retPct - hold.stats.retPct
   const inMarket = s.totalDays > 0 ? Math.round((s.daysInMarket / s.totalDays) * 100) : 0
   return (
-    <dl className="revstats">
-      <div className="lead">
-        <dt>差距</dt>
-        <dd className={`tnum ${excess >= 0 ? 'chg-up' : 'chg-down'}`}>{pct(excess)}</dd>
-      </div>
-      <div><dt>照建議做</dt><dd className="tnum">{pct(s.retPct)}</dd></div>
-      <div><dt>買了不動</dt><dd className="tnum">{pct(hold.stats.retPct)}</dd></div>
-      {/* 這些標籤原本是行話（在市、超額、回落）。同一個數字，
-          用讀者的話寫才看得懂在比什麼 */}
-      <div><dt>有股票的天數</dt><dd className="tnum">{s.daysInMarket}/{s.totalDays}（{inMarket}%）</dd></div>
-      <div><dt>買賣次數</dt><dd className="tnum">{s.trades} 次</dd></div>
-      {/* §11 的規矩：次數少的時候不寫百分比。「12 次裡 7 次」比「勝率 58%」誠實 */}
-      <div>
-        <dt>賣出賺錢</dt>
-        <dd className="tnum">{s.closed > 0 ? `${s.closed} 次裡 ${s.wins} 次` : '—'}</dd>
-      </div>
-      <div><dt>中途最多虧</dt><dd className="tnum">−{s.maxDrawdownPct.toFixed(2)}%</dd></div>
-      <div><dt>手續費與稅</dt><dd className="tnum">{Math.round(s.totalFees).toLocaleString('en-US')}（{s.feesPct.toFixed(2)}%）</dd></div>
-      <div><dt>觸發停損</dt><dd className="tnum">{s.stopped} 次</dd></div>
-    </dl>
+    <details className="revdetails">
+      <summary>更多數字</summary>
+      <dl className="revstats">
+        <div><dt>照建議做</dt><dd className="tnum">{pct(s.retPct)}</dd></div>
+        <div><dt>買了不動</dt><dd className="tnum">{pct(hold.stats.retPct)}</dd></div>
+        <div><dt>有股票的天數</dt><dd className="tnum">{s.daysInMarket}/{s.totalDays}（{inMarket}%）</dd></div>
+        <div><dt>買賣次數</dt><dd className="tnum">{s.trades} 次</dd></div>
+        {/* §11 的規矩：次數少的時候不寫百分比。「12 次裡 7 次」比「勝率 58%」誠實 */}
+        <div>
+          <dt>賣出賺錢</dt>
+          <dd className="tnum">{s.closed > 0 ? `${s.closed} 次裡 ${s.wins} 次` : '—'}</dd>
+        </div>
+        <div><dt>中途最多虧</dt><dd className="tnum">−{s.maxDrawdownPct.toFixed(2)}%</dd></div>
+        <div><dt>手續費與稅</dt><dd className="tnum">{Math.round(s.totalFees).toLocaleString('en-US')}（{s.feesPct.toFixed(2)}%）</dd></div>
+        <div><dt>觸發停損</dt><dd className="tnum">{s.stopped} 次</dd></div>
+      </dl>
+    </details>
   )
 }
 
@@ -146,19 +155,45 @@ export default async function ReviewPage() {
                     要說出來，不能讓那個數字自己去暗示。 */}
                 {rule.stats.trades === 0 && (
                   <p className="revnote" data-testid={`review-flat-${r.code}`}>
-                    這一檔<b>一次都沒有進場</b>——期間內進場條件從未同時成立，
-                    全程是現金。下面的差距是「沒參與」跟「一直抱著」的落差，
+                    <b>一次都沒進場</b>，全程現金——下面的差距是「沒參與」的落差，
                     不是買賣做得好不好。
                   </p>
                 )}
 
-                <Stats rule={rule} hold={hold} />
+                {/* 第一層只回答一件事：有沒有幫助。
+                    一句話 ＋ 一個大數字 ＋ 一條差距線，其餘收進「更多數字」。 */}
+                {(() => {
+                  const lead = aiLive ? ai! : rule
+                  const leadLabel = aiLive ? 'AI 判斷' : '照建議做'
+                  const gap = lead.stats.retPct - hold.stats.retPct
+                  const points = gapSeries(lead.curve, hold.curve)
+                  return (
+                    <>
+                      <p className="revanswer" data-testid={`answer-${r.code}`}>
+                        <span className={`revgap tnum ${gap >= 0 ? 'chg-up' : 'chg-down'}`}>
+                          {gap >= 0 ? '+' : ''}{gap.toFixed(2)}%
+                        </span>
+                        <span className="revanswertext">
+                          {gap >= 0
+                            ? `${leadLabel}比買了不動多賺這麼多`
+                            : `${leadLabel}比買了不動少賺這麼多`}
+                        </span>
+                      </p>
 
-                <EquityChart series={[
-                  { track: 'rule', curve: rule.curve },
-                  ...(aiLive ? [{ track: 'ai' as const, curve: ai!.curve }] : []),
-                  { track: 'hold', curve: hold.curve },
-                ]} />
+                      {/* 寬窄兩份 viewBox，用 CSS 切換。920 寬的 viewBox 塞進 375px
+                          螢幕，軸標籤實測只剩 3.6px——那不是小，是看不見。 */}
+                      <div className="chart-wide">
+                        <GapChart points={points} leadLabel={leadLabel} id={`w-${r.code}`} />
+                      </div>
+                      <div className="chart-narrow">
+                        <GapChart points={points} leadLabel={leadLabel}
+                          id={`n-${r.code}`} width={W_NARROW} />
+                      </div>
+                    </>
+                  )
+                })()}
+
+                <Details rule={rule} hold={hold} />
 
                 {!aiLive && (
                   <p className="fine" data-testid={`review-ai-${r.code}`}>
