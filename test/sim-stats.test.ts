@@ -15,7 +15,7 @@ import { trackStats, maxDrawdown } from '../src/lib/sim/stats'
 const eq = (vals: number[]) =>
   vals.map((v, i) => ({
     d: `2026-06-${String(i + 1).padStart(2, '0')}`,
-    cash: 0, shares: 1, mark: v, equity: v,
+    cash: 0, shares: 1, cost: 0, mark: v, equity: v,
     retPct: ((v - vals[0]!) / vals[0]!) * 100,
   }))
 

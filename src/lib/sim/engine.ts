@@ -105,6 +105,8 @@ export interface EquityPoint {
   d: string
   cash: number
   shares: number
+  /** 持股總成本（含買進手續費）。問 AI 之前要告訴它自己是賺是賠 */
+  cost: number
   mark: number
   equity: number
   retPct: number
@@ -205,6 +207,7 @@ export function simulate(bars: readonly Bar[], decide: Decider, cfg: SimConfig):
       d: bar.date,
       cash: state.cash,
       shares: state.shares,
+      cost: state.cost,
       mark: bar.c,
       equity: eq,
       retPct: initialCash > 0 ? ((eq - initialCash) / initialCash) * 100 : 0,

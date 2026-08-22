@@ -72,5 +72,21 @@ $out = & npm run ingest 2>&1
 $code = $LASTEXITCODE
 $out | ForEach-Object { Write-Log $_ }
 
+# 4. AI 帳戶的每日決策（PLAN §13.5）。
+#
+# **這一段失敗不影響上面。** 價位、指標、圖表、規則帳戶都不依賴它；
+# 它掛掉隔天頁面照常，只是 AI 那條曲線多一天沒跑到。所以先判斷抓取成功、
+# 再跑 AI，而且它的結果不改變這支腳本的離開碼。
+if ($code -eq 0) {
+  Write-Log '--- 抓取完成，開始 AI 決策 ---'
+  try {
+    $ai = & npm run ai 2>&1
+    $ai | ForEach-Object { Write-Log $_ }
+    if ($LASTEXITCODE -ne 0) { Write-Log "AI 決策 exit $LASTEXITCODE（不影響抓取結果）" }
+  } catch {
+    Write-Log "AI 決策失敗：$_（不影響抓取結果）"
+  }
+}
+
 if ($code -eq 0) { Write-Log '--- 完成 ---' } else { Write-Log "--- 失敗（exit $code）---" }
 exit $code

@@ -343,7 +343,7 @@ async function writeTrack(
 
   const eq = r.equity.map((e) => ({
     account_id: accountId, d: e.d,
-    cash: e.cash, shares: e.shares, mark: e.mark,
+    cash: e.cash, shares: e.shares, cost: e.cost, mark: e.mark,
     equity: e.equity, ret_pct: e.retPct,
   }))
   for (let i = 0; i < eq.length; i += 500) {

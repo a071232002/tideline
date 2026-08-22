@@ -129,9 +129,12 @@ export default async function ReviewPage() {
 
                 {!aiLive && (
                   <p className="fine" data-testid={`review-ai-${r.code}`}>
-                    {/* 星號是 markdown，不是 HTML——寫在 JSX 裡會原樣印出來 */}
-                    AI 判斷那條還沒有資料。它<b>不能回補</b>
-                    （事後看歷史等於偷看未來），只能從開始跑的那天往後長。
+                    {/* 有決策但都是觀望 ≠ 還沒開始。只數成交筆數會把前者說成後者 */}
+                    {r.aiDecisions > 0
+                      ? `AI 已判斷 ${r.aiDecisions} 天，目前都選擇觀望，所以還沒有曲線。`
+                      : 'AI 判斷那條還沒有資料。'}
+                    　它<b>不能回補</b>（事後看歷史等於偷看未來），
+                    只能從開始跑的那天往後長。
                     {r.aiMissing > 0 && `目前有 ${r.aiMissing} 天沒跑到。`}
                   </p>
                 )}

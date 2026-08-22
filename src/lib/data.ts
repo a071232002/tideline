@@ -454,6 +454,14 @@ export interface ReviewSymbol {
   tracks: ReviewTrack[]
   /** AI 那條有幾天沒跑到。一半以上 missing 的曲線不能拿來比較（§13.5） */
   aiMissing: number
+  /**
+   * AI 做過幾天決策（含 hold）。
+   *
+   * **「有決策但都是觀望」跟「根本還沒開始」是兩件事。** 只看成交筆數會把
+   * 前者說成後者——模型每天認真判斷、每天決定不動，那是有內容的紀錄，
+   * 不是空白。
+   */
+  aiDecisions: number
 }
 
 /**
@@ -500,7 +508,7 @@ export async function getReview(): Promise<ReviewSymbol[]> {
   const ids = accounts.map((a) => a.id as string)
   // 一定要分頁：這三張表的列數輕易超過 PostgREST 的 1000 列預設上限
   const eqRows = await fetchPaged((from, to) => supabase
-    .from('sim_equity').select('account_id, d, cash, shares, mark, equity, ret_pct')
+    .from('sim_equity').select('account_id, d, cash, shares, cost, mark, equity, ret_pct')
     .in('account_id', ids).order('account_id').order('d', { ascending: true })
     .range(from, to))
   const trRows = await fetchPaged((from, to) => supabase
@@ -517,6 +525,7 @@ export async function getReview(): Promise<ReviewSymbol[]> {
     const list = eqBy.get(id) ?? []
     list.push({
       d: e.d as string, cash: Number(e.cash), shares: Number(e.shares),
+      cost: Number(e.cost ?? 0),
       mark: Number(e.mark), equity: Number(e.equity), retPct: Number(e.ret_pct),
     })
     eqBy.set(id, list)
@@ -536,10 +545,11 @@ export async function getReview(): Promise<ReviewSymbol[]> {
   }
 
   const missingBy = new Map<string, number>()
+  const decidedBy = new Map<string, number>()
   for (const l of logRows) {
-    if (l.status === 'ok') continue
     const id = l.account_id as string
-    missingBy.set(id, (missingBy.get(id) ?? 0) + 1)
+    if (l.status === 'ok') decidedBy.set(id, (decidedBy.get(id) ?? 0) + 1)
+    else missingBy.set(id, (missingBy.get(id) ?? 0) + 1)
   }
 
   const bySymbol = new Map<string, ReviewSymbol>()
@@ -553,7 +563,7 @@ export async function getReview(): Promise<ReviewSymbol[]> {
         name: (s.name_zh as string) ?? (s.name_en as string) ?? null,
         currency: a.currency as string,
         initialTwd: Number(a.initial_twd),
-        tracks: [], aiMissing: 0,
+        tracks: [], aiMissing: 0, aiDecisions: 0,
       })
     }
     const row = bySymbol.get(sid)!
@@ -563,7 +573,10 @@ export async function getReview(): Promise<ReviewSymbol[]> {
       curve: curve.map((e) => ({ d: e.d, retPct: e.retPct })),
       stats: trackStats(curve, trBy.get(a.id as string) ?? [], Number(a.initial_cash)),
     })
-    if (a.track === 'ai') row.aiMissing = missingBy.get(a.id as string) ?? 0
+    if (a.track === 'ai') {
+      row.aiMissing = missingBy.get(a.id as string) ?? 0
+      row.aiDecisions = decidedBy.get(a.id as string) ?? 0
+    }
   }
 
   return [...bySymbol.values()].sort((a, b) => a.code.localeCompare(b.code, 'en'))

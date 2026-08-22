@@ -18,7 +18,8 @@
     "e2e:compose:down": "podman compose --env-file .env.e2e -f docker-compose.e2e.yml down --remove-orphans",
     "backfill": "tsx scripts/backfill.ts",
     "fx": "tsx scripts/fx.ts",
-    "sim": "tsx scripts/sim-backfill.ts"
+    "sim": "tsx scripts/sim-backfill.ts",
+    "ai": "tsx scripts/ai-decide.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
