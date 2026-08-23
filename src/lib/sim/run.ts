@@ -1,4 +1,5 @@
 import { createAdminClient } from '../supabase/admin'
+import { fetchPaged } from '../supabase/paged'
 import { simulate, type Decider, type CorporateAction, type SimResult } from './engine'
 import { ruleDecider, holdDecider, type RuleDay } from './rules'
 import { DEFAULT_CAPITAL_TWD, DEFAULT_FEES, DEFAULT_RULES, PARAMS_VERSION } from './params'
@@ -128,9 +129,20 @@ export function initialCashFor(
 
 async function loadFx(): Promise<FxRates> {
   const db = createAdminClient()
-  const { data } = await db.from('fx_rates').select('d, rate').eq('pair', FX_PAIR)
+  /**
+   * **一定要分頁，而且一定要排序。**
+   *
+   * 原本是一句沒有 `order()` 的 `select()`。匯率每個交易日一列，大約四年後
+   * 超過 PostgREST 的 1000 列上限——而沒有排序的查詢被截斷之後，回來的是一個
+   * **任意**子集。`rateOn()` 從拿到的日期裡挑「不晚於指定日的最後一天」，
+   * 拿到任意子集就會挑到一個更早的匯率，整條美股帳戶的台幣淨值全部偏掉，
+   * 而且不會有任何錯誤。
+   */
+  const rows = await fetchPaged((from, to) => db
+    .from('fx_rates').select('d, rate').eq('pair', FX_PAIR)
+    .order('d', { ascending: true }).range(from, to))
   const out: FxRates = {}
-  for (const r of data ?? []) out[r.d as string] = Number(r.rate)
+  for (const r of rows) out[r.d as string] = Number(r.rate)
   return out
 }
 
@@ -181,13 +193,15 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
 
     const { data: barRows } = await db.from('daily_bars')
       .select('d, o, h, l, c, v').eq('symbol_id', sym.id).order('d', { ascending: true })
-    const { data: anRows } = await db.from('daily_analysis')
+    // 分析永不刪除（§11），每檔每年約 250 列。由舊到新排序，所以一旦超過
+    // 1000 列，被截斷丟掉的正好是**最新的**那段——模擬會停在四年前。
+    const anRows = await fetchPaged((from, to) => db.from('daily_analysis')
       .select('d, levels, pct_b, k, d_val, origin')
-      .eq('symbol_id', sym.id).order('d', { ascending: true })
+      .eq('symbol_id', sym.id).order('d', { ascending: true }).range(from, to))
     const { data: actRows } = await db.from('corporate_actions')
       .select('d, kind, amount').eq('symbol_id', sym.id)
 
-    const analyses = (anRows ?? []) as unknown as AnalysisRow[]
+    const analyses = anRows as unknown as AnalysisRow[]
     if (analyses.length === 0) {
       for (const t of TRACKS) {
         out.push({ code: sym.code, track: t, trades: 0, retPct: 0, daysInMarket: 0,
@@ -275,15 +289,17 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
       await db.from('sim_accounts')
         .update({ started_on: startedOn }).eq('id', accountId).neq('started_on', startedOn)
 
-      const { data: logs } = track === 'ai'
-        ? await db.from('sim_ai_log')
+      // 決策紀錄永不刪除（§13.1 四），一樣是由舊到新——截斷會讓 AI 那條
+      // 軌道停在四年前，而它是這個站的主角
+      const logs = track === 'ai'
+        ? await fetchPaged((from, to) => db.from('sim_ai_log')
           .select('d, status, action, confidence, reason')
-          .eq('account_id', accountId).order('d', { ascending: true })
-        : { data: [] }
+          .eq('account_id', accountId).order('d', { ascending: true }).range(from, to))
+        : []
 
       const result = simulate(
         bars,
-        deciderFor(track, days, (logs ?? []) as unknown as AiLogRow[], initialCash),
+        deciderFor(track, days, logs as unknown as AiLogRow[], initialCash),
         { market: sym.market, isEtf: sym.isEtf, initialCash, fees: DEFAULT_FEES, actions },
       )
 

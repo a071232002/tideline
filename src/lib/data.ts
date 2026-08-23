@@ -3,6 +3,7 @@ import { createClient } from './supabase/server'
 import { createAdminClient } from './supabase/admin'
 import { CHART_BARS } from './pipeline'
 import { marketFreshness, taipeiToday, type MarketFreshness } from './freshness'
+import { fetchPaged } from './supabase/paged'
 import { trackStats, type StatTrade, type TrackStats } from './sim/stats'
 import type { EquityPoint } from './sim/engine'
 
@@ -459,16 +460,18 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
   const out: SimTrack[] = []
   for (const acc of accounts) {
     const id = acc.id as string
-    const { data: eq } = await supabase
+    // 每個帳戶每個交易日一列，由舊到新——超過 1000 列之後截斷丟掉的是最新的，
+    // 也就是曲線末端會停住，而畫面看起來完全正常
+    const eq = await fetchPaged((from, to) => supabase
       .from('sim_equity').select('d, cash, shares, cost, mark, equity, ret_pct')
-      .eq('account_id', id).order('d', { ascending: true })
+      .eq('account_id', id).order('d', { ascending: true }).range(from, to))
     const { data: tr } = await supabase
       .from('sim_trades')
       .select('signal_d, fill_d, side, qty, price, fee, tax, cost_basis, triggers, reason')
       .eq('account_id', id).order('signal_d', { ascending: true })
 
-    const curve = (eq ?? []).map((e) => ({ d: e.d as string, retPct: Number(e.ret_pct) }))
-    const last = (eq ?? [])[eq!.length - 1]
+    const curve = eq.map((e) => ({ d: e.d as string, retPct: Number(e.ret_pct) }))
+    const last = eq[eq.length - 1]
     const trades = tr ?? []
 
     // AI 的判斷紀錄。只查 ai 那一條——另外兩條沒有這種東西
@@ -498,8 +501,8 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
       cash: last ? Number(last.cash) : Number(acc.initial_cash),
       shares: last ? Number(last.shares) : 0,
       cost: last ? Number(last.cost ?? 0) : 0,
-      daysInMarket: (eq ?? []).filter((e) => Number(e.shares) > 0).length,
-      totalDays: (eq ?? []).length,
+      daysInMarket: eq.filter((e) => Number(e.shares) > 0).length,
+      totalDays: eq.length,
       totalFees: trades.reduce((s, t) => s + Number(t.fee) + Number(t.tax), 0),
       trades: trades.length,
       curve,
@@ -512,7 +515,7 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
         reason: (t.reason as string) ?? null,
       })),
       stats: trackStats(
-        (eq ?? []).map((e) => ({
+        eq.map((e) => ({
           d: e.d as string, cash: Number(e.cash), shares: Number(e.shares),
           cost: Number(e.cost ?? 0), mark: Number(e.mark),
           equity: Number(e.equity), retPct: Number(e.ret_pct),
@@ -573,32 +576,6 @@ export interface ReviewSymbol {
    * 不是空白。
    */
   aiDecisions: number
-}
-
-/**
- * 分頁把整張表讀完。
- *
- * **PostgREST 預設一次最多回 1000 列，而且不會告訴你被截斷了。**
- * 實測 2026-08-22：5 檔 × 3 軌道 × 114 天 ≈ 1710 列的淨值查詢被切一半，
- * 後面的帳戶只拿到半截曲線，統計就用半截資料算——0050 顯示「在市 47/66 天」，
- * 實際是 73/114。沒有錯誤訊息，數字看起來也完全合理。
- *
- * 這是 `sanity.ts` 開頭那句話的資料庫版本：錯得很像對的。
- */
-async function fetchPaged<T>(
-  page: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
-  size = 1000,
-): Promise<T[]> {
-  const out: T[] = []
-  for (let from = 0; ; from += size) {
-    const { data } = await page(from, from + size - 1)
-    if (!data || data.length === 0) break
-    out.push(...data)
-    if (data.length < size) break
-    // 安全閥：帳戶資料不該有幾十萬列，真的有就是別的地方壞了
-    if (out.length > 200_000) break
-  }
-  return out
 }
 
 export async function getReview(): Promise<ReviewSymbol[]> {

@@ -277,6 +277,29 @@ async function ingestFx(): Promise<string | null> {
   }
 }
 
+/**
+ * 執行紀錄保留幾天。
+ *
+ * 純粹是「這輪跑了沒、幾檔成功」的日誌，不是回顧的素材（那是
+ * `daily_analysis` 與 `sim_ai_log` 的工作，那兩張明令永不刪除）。
+ * 一天四列，不清就是每年 1,460 列的垃圾。90 天足夠回答
+ * 「上週是不是有幾天沒跑」，再久就沒人會去看。
+ */
+export const KEEP_JOB_RUNS_DAYS = 90
+
+/**
+ * PLAN §10 步驟 22 的「每月校正」**不需要實作，因為每天就在做**。
+ *
+ * §7 寫的增量策略（平常只抓最近 5 個交易日、每月校正一次全區間）
+ * 從來沒有實作：`ingestSymbol` 每一輪都抓台股 9 個月（`fetchTwseDailyBars(code, 9)`）
+ * 與美股 1 年（`fetchYahooDailyBars(sym, '1y')`）。所以來源事後修正的數值
+ * 每天都會被蓋回來——校正的目的已經達成，再加一個月排程只是重複。
+ *
+ * 代價寫在別的地方：每檔每輪約 8 秒（九次 TWSE 請求，中間各隔 1.2 秒避免限流）。
+ * 本機跑得動，搬到有執行時間上限的雲端函式就是那個上限在決定能追蹤幾檔。
+ * 要解的是**那件事**，不是加校正。
+ */
+
 /** 跑一輪：所有被關注的標的。沒人關注的不抓（PLAN §7）。 */
 export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
   const db = createAdminClient()
@@ -306,6 +329,16 @@ export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
     for (const u of users?.users ?? []) await rebuildAll(u.id)
   } catch (e) {
     simNote = `模擬帳戶重建失敗：${e instanceof Error ? e.message : String(e)}`
+  }
+
+  // 執行紀錄的保留期。放在最後、包在 try 裡——清不掉不該讓整輪算失敗，
+  // 那只是日誌。
+  try {
+    const cutoff = new Date(Date.now() - KEEP_JOB_RUNS_DAYS * 86_400_000)
+      .toISOString().slice(0, 10)
+    await db.from('job_runs').delete().lt('started_at', cutoff)
+  } catch {
+    // 日誌清不掉不影響任何數字
   }
 
   const failed = results.filter((r) => !r.ok)
