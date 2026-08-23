@@ -50,7 +50,9 @@ export function LevelStrip({ levels, close }: { levels: StripLevel[]; close: num
               {money(l.lo)}{range && <span className="striprange">～{money(l.hi!)}</span>}
             </div>
             <div className="striphint">
-              {m.hint}
+              {/* 手機上只留距離。「波段賣出／反彈至此減碼」是同一句話說兩次，
+                  而下面的「為什麼是這些價位」本來就在解釋這件事。 */}
+              <span className="hinttext">{m.hint}</span>
               {gap !== null && (
                 <span className="tnum stripgap">
                   {gap >= 0 ? '↑' : '↓'}{Math.abs(gap).toFixed(1)}%

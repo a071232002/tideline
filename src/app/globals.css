@@ -278,7 +278,13 @@ h2 {
 .chartsvg { width: 100%; height: auto; display: block; }
 .grid { stroke: var(--line); stroke-width: 1; }
 .refline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
-.tick { fill: var(--muted); font-size: 11px; }
+/* 軸標籤的字級是**使用者單位**，會跟著 viewBox 一起縮放，所以這裡寫的
+   數字不是螢幕上的大小。實測：寬版 920 單位畫在 888px 上（比例 .97），
+   窄版 360 單位畫在 323px 上（比例 .86）。原本兩邊都寫 11，畫出來分別是
+   10.7px 與 9.4px——都低於這個站給中文訂的 12px 下限，而軸上讀數帶「中軌」
+   這種中文。兩邊各自乘回去。 */
+.tick { fill: var(--muted); font-size: 13px; }
+.narrowtext .tick { font-size: 15.4px; }
 .closeline { stroke: var(--blue); stroke-width: 2; stroke-linejoin: round; fill: none; }
 .midline2 { stroke: var(--mid); stroke-width: 1.8; stroke-linejoin: round; fill: none; }
 .bandline { stroke: var(--bandline); stroke-width: 1.2; fill: none; }
@@ -322,9 +328,17 @@ a { color: inherit; }
 .addform .err, .addform .okmsg { grid-column: 1 / -1; margin: 2px 0 0; }
 .okmsg { font-size: var(--t-body); color: var(--buy); }
 
+/* 手機上排成一列：市場、代號、加入。
+   原本市場獨佔一列、輸入框與送出鈕再一列，整張表單 138px——高到需要一顆
+   收合鈕去藏它，於是加入一檔標的變成兩次點擊。一列 44px 就不必藏了。
+   卡片的外框與內距在這裡也是多的：一列輸入不是一張卡。 */
 @media (max-width: 520px) {
-  .addform { grid-template-columns: 1fr auto; }
-  .addform .seg { grid-column: 1 / -1; }
+  .addform {
+    grid-template-columns: auto 1fr auto; gap: 8px;
+    background: 0 0; border: 0; box-shadow: none; padding: 0; margin: 10px 0 4px;
+  }
+  .addform .segbtn { padding: 0 10px; }
+  .addform .input { min-width: 0; }
 }
 
 /* 市場切換：分段控制項，比下拉選單少一次點擊，而且兩個選項一眼看得到 */
@@ -417,10 +431,21 @@ a { color: inherit; }
 }
 .stripgap { color: var(--ink2); font-weight: 600; }
 
+/* 手機上三欄並排，不要疊成三張卡。
+   疊起來是 334px——第一屏的 43%，而圖上的「關鍵價位」圖層畫的是同一組
+   數字。三個價位是要**互相比較**的（現價離哪一邊近），並排才比得出來。
+   說明文字讓給下面的「為什麼是這些價位」，那裡講得更清楚。 */
 @media (max-width: 640px) {
-  .strip { grid-template-columns: 1fr; gap: 8px; }
-  .stripcell { padding: 10px 14px 9px; }
-  .stripval { font-size: var(--n-md); }
+  /* 圖卡在手機上把左右內距讓給圖：多出來的 20px 直接變成字的解析度 */
+  .chartcard { padding-left: 10px; padding-right: 10px; }
+  .strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
+  .stripcell { padding: 8px 10px 9px; }
+  .striplab { font-size: var(--t-micro); letter-spacing: 0; }
+  .stripval { font-size: var(--n-sm); margin-top: 3px; }
+  /* 區間的另一半換到下一行——三欄各 110px 放不下 228.00～230.00 */
+  .striprange { display: block; font-size: var(--t-micro); font-weight: 600; }
+  .striphint { margin-top: 4px; }
+  .striphint .hinttext { display: none; }
 }
 
 /* 清單列的緊湊版價位 */
@@ -603,20 +628,6 @@ a { color: inherit; }
 .sorttag:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 
 /* 手機第一屏：加入表單預設收起，清單才是第一眼看到的東西 */
-.addtoggle {
-  appearance: none; font: inherit; font-size: var(--t-body); cursor: pointer;
-  border: 1px solid var(--line); background: var(--card); color: var(--ink2);
-  border-radius: 8px; padding: 7px 14px; margin: 10px 0 4px;
-  display: none;
-}
-.addtoggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-
-/* 手機才出現的收合鈕。這兩條要排在所有 .addtoggle 規則之後。 */
-.addtoggle { display: none; }
-@media (max-width: 720px) {
-  .addtoggle { display: inline-flex; }
-  .addform.collapsed { display: none; }
-}
 
 /* ------------------------------------------------------------- 頂部列 */
 .topbar {
@@ -675,10 +686,8 @@ a { color: inherit; }
 .iconbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .iconbtn:disabled { opacity: .5; cursor: progress; }
 
-/* 圖示＋文字。
-   注意 .addtoggle 不放進這條——它在桌機是 display:none，寫在這裡會把它打開，
-   而且 inline-flex 沒有 nowrap 時中文會一個字一行，按鈕就變成一塊方磚。 */
-.btn.withicon, .addtoggle, .backlink {
+/* 圖示按鈕與返回連結：圖示與文字要對齊，中文不要斷行 */
+.btn.withicon, .backlink {
   align-items: center;
   gap: 6px;
   white-space: nowrap;
@@ -695,7 +704,7 @@ a { color: inherit; }
 .backlink:hover { color: var(--ink); }
 
 /* 所有按鈕都不換行——中文按鈕一旦換行就會變成直式的方塊 */
-.btn, .segbtn, .filtertag, .sorttag, .addtoggle {
+.btn, .segbtn, .filtertag, .sorttag {
   white-space: nowrap;
 }
 
@@ -708,12 +717,12 @@ a { color: inherit; }
  *
  * 只撐高度不改字級與內距，密度看起來幾乎沒變。
  */
-.segbtn, .filtertag, .sorttag, .btn, .addtoggle, .layerbtn, .input,
+.segbtn, .filtertag, .sorttag, .btn, .layerbtn, .input,
 .capinput, .revdetails summary {
   min-height: 44px;
 }
 /* 這些是 inline 元素，min-height 要有 flex 或 inline-flex 才生效 */
-.segbtn, .filtertag, .sorttag, .btn, .addtoggle, .layerbtn {
+.segbtn, .filtertag, .sorttag, .btn, .layerbtn {
   display: inline-flex; align-items: center; justify-content: center;
 }
 
@@ -856,6 +865,18 @@ a { color: inherit; }
   .simscores .simscore:last-child .num { font-size: var(--n-md); }
 }
 
+/* 圖上停在哪一天的讀數。固定一行，放在圖的正上方。
+   畫在圖裡的話它會疊在資料上，而且字級受 viewBox 縮放擺布——
+   窄版把字放大之後就壓在收盤價線上了。 */
+.readout {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 6px; min-height: 30px;
+}
+.rdate { font-size: var(--t-micro); color: var(--muted); }
+.rdclose { font-size: var(--n-sm); font-weight: 800; color: var(--blue); }
+.rmid { font-size: var(--t-micro); color: var(--mid); font-weight: 600; }
+.rhint { font-size: var(--t-micro); color: var(--muted); margin-left: auto; }
+
 /* 圖表的兩種 viewBox 寬度（Charts.tsx 的 W_WIDE / W_NARROW）。
    窄螢幕不是「把寬圖縮小」——縮小會把 11px 的軸標籤壓成 3.6px。
    換一個窄的 viewBox，字級相對變大，才讀得到。 */
@@ -925,6 +946,12 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 .simnextwhy {
   flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
   line-height: var(--lh-normal);
+}
+/* 現在手上有什麼。跟理由同一階——它是動作的前提，不是主角，
+   但要能一眼在同一塊裡看到，不必捲到下面的帳戶卡。 */
+.simnowline {
+  flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
+  border-top: 1px solid var(--line); margin-top: 2px; padding-top: 6px;
 }
 
 /* 成交紀錄：一筆一段，理由跟在數字下面。

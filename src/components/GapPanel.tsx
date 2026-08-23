@@ -59,7 +59,8 @@ export function GapPanel({
   const good = last >= 0
 
   return (
-    <svg className="chartsvg gappanel" viewBox={`0 0 ${width} ${H}`} role="img"
+    <svg className={`chartsvg gappanel${width <= 360 ? ' narrowtext' : ''}`}
+      viewBox={`0 0 ${width} ${H}`} role="img"
       aria-label={`與買了不動的差距，目前 ${last.toFixed(2)}%`}>
       <defs>
         <clipPath id={`gp-up-${id}`}>

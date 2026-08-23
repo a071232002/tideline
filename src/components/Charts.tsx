@@ -40,6 +40,18 @@ function indexFromEvent(
 export const W_WIDE = 920
 export const W_NARROW = 360
 
+/**
+ * SVG 裡的字級是**使用者單位**，會跟著 viewBox 一起縮放。
+ *
+ * 窄版的 viewBox 是 360，但手機上這張圖實際只有約 323px 寬（375 減掉外層
+ * 與卡片的內距），所以縮放比是 0.9——11 個單位的軸標籤畫出來只有 9.4px，
+ * 實測就是這個數字。那低於這個站給中文訂的 12px 下限。
+ *
+ * 對策是把窄版的字級**乘回去**，而不是把圖放大：圖放大會讓它在寬螢幕上
+ * 變成一塊模糊的巨圖。
+ */
+export const narrowScale = (width: number) => (width <= W_NARROW ? 1.4 : 1)
+
 const ML = 46
 const MT = 14
 
@@ -78,6 +90,7 @@ export function PriceChart({
   width?: number
 }) {
   const W = width
+  const fs = narrowScale(width)
   const H = 380
   const PH = H - MT - 26
   const PW = W - ML - 14
@@ -146,7 +159,18 @@ export function PriceChart({
 
   return (
     <>
-      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`}
+      {/* 讀數放在圖**外面**，固定一行。
+          原本它畫在 SVG 裡、跟著游標的點浮動：三行字疊在資料上，
+          窄版把字級乘回去之後就直接壓在收盤價線上（實測「中軌 102.57」
+          蓋住線）。而且圖裡的字受 viewBox 縮放擺布，圖外的不會。
+          位置的資訊由十字線與圓點負責，數字只要在同一個地方唸出來就好。 */}
+      <div className="readout" data-testid="chart-readout">
+        <span className="tnum rdate">{curBar.d}</span>
+        <b className="tnum rdclose">{curBar.c.toFixed(2)}</b>
+        {curBand && <span className="tnum rmid">中軌 {curBand.mid.toFixed(2)}</span>}
+        <span className="rhint wide-only">滑過或用左右鍵看其他日子</span>
+      </div>
+      <svg className={`chartsvg${fs > 1 ? ' narrowtext' : ''}`} viewBox={`0 0 ${W} ${H}`}
         data-last-bar={bars[bars.length - 1]!.d}
         data-hover={hoverI ?? ''}
         /* 有互動就不只是圖片：給它一個可聚焦的角色與鍵盤操作，
@@ -239,7 +263,7 @@ export function PriceChart({
                 </title>
               </polygon>
               <text x={px} y={buy ? py + 28 : py - 21} textAnchor="middle"
-                style={{ fill: `var(--${varName})`, fontWeight: 700, fontSize: 11 }}>
+                style={{ fill: `var(--${varName})`, fontWeight: 700, fontSize: 11 * fs }}>
                 {m.price.toFixed(2)}
               </text>
             </g>
@@ -257,29 +281,6 @@ export function PriceChart({
           style={{ fill: 'var(--blue)' }} />
         <circle cx={x(cur)} cy={y(curBar.c)} r={7.5} fill="none"
           style={{ stroke: 'var(--blue)', opacity: .35 }} />
-
-        {(() => {
-          // 讀數靠右會被切掉，所以過了中線就翻到左邊
-          const flip = x(cur) > ML + PW * 0.62
-          const tx = flip ? x(cur) - 12 : x(cur) + 12
-          const anchor = flip ? 'end' : 'start'
-          const ty = Math.max(MT + 34, Math.min(y(curBar.c) - 14, MT + PH - 8))
-          return (
-            <g style={{ pointerEvents: 'none' }} data-testid="chart-readout">
-              <text x={tx} y={ty - 16} textAnchor={anchor} className="tick"
-                style={{ fill: 'var(--muted)' }}>{curBar.d}</text>
-              <text x={tx} y={ty} textAnchor={anchor}
-                style={{ fill: 'var(--blue)', fontWeight: 800, fontSize: 14 }}>
-                {curBar.c.toFixed(2)}
-              </text>
-              {curBand && (
-                <text x={tx} y={ty + 15} textAnchor={anchor} className="tick">
-                  中軌 {curBand.mid.toFixed(2)}
-                </text>
-              )}
-            </g>
-          )
-        })()}
 
         {bars.map((b, i) => (i % labelEvery === 0 ? (
           <text key={b.d} className="tick" x={x(i)} y={H - 6} textAnchor="middle">{b.d.slice(5)}</text>
@@ -335,7 +336,8 @@ export function KdChart({ points, width = W_WIDE }: {
 
   return (
     <>
-      <svg className="chartsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="KD 指標">
+      <svg className={`chartsvg${narrowScale(width) > 1 ? ' narrowtext' : ''}`}
+        viewBox={`0 0 ${W} ${H}`} role="img" aria-label="KD 指標">
         {[0, 20, 50, 80, 100].map((v) => (
           <g key={v}>
             <line className={v === 20 || v === 80 ? 'refline' : 'grid'}

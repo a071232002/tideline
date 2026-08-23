@@ -388,6 +388,8 @@ export interface SimTrack {
   equity: number
   cash: number
   shares: number
+  /** 手上這些股票花了多少錢。報酬率答不了「投入多少」——0% 可能是空手 */
+  cost: number
   daysInMarket: number
   totalDays: number
   totalFees: number
@@ -442,6 +444,7 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
       equity: last ? Number(last.equity) : Number(acc.initial_cash),
       cash: last ? Number(last.cash) : Number(acc.initial_cash),
       shares: last ? Number(last.shares) : 0,
+      cost: last ? Number(last.cost ?? 0) : 0,
       daysInMarket: (eq ?? []).filter((e) => Number(e.shares) > 0).length,
       totalDays: (eq ?? []).length,
       totalFees: trades.reduce((s, t) => s + Number(t.fee) + Number(t.tax), 0),

@@ -12,6 +12,10 @@ import { Icon } from './Icon'
  * **指令與回顧是兩種閱讀狀態，不要混在一起。**
  * 決策條說「哪些價位有意義」，這一行說「所以明天開盤做什麼」，兩句話是連著的；
  * 帳戶績效說「過去這樣做的結果」，那是另一件事，留在下面。
+ *
+ * **現在手上有什麼也放這裡。**「明天賣一半」要有意義，得先知道現在有幾股；
+ * 那兩個數字原本分別在第 5 塊與第 11 塊，中間隔著決策條、整張圖與一個標題
+ * ——手機上實測相距約 900px。「現在持股」是動作的前提，不是回顧的統計。
  */
 
 function verb(p: NonNullable<SimTrack['pending']>): string {
@@ -23,6 +27,9 @@ function verb(p: NonNullable<SimTrack['pending']>): string {
 
 const qtyText = (q: number, market: 'TW' | 'US') =>
   market === 'TW' ? `${Math.round(q)} 股` : `${q.toFixed(4)} 股`
+
+const money = (v: number, cur: string) =>
+  `${cur === 'TWD' ? 'NT$' : '$'}${Math.round(v).toLocaleString('en-US')}`
 
 export function SimNext({ track, market }: {
   track: SimTrack | undefined
@@ -54,6 +61,13 @@ export function SimNext({ track, market }: {
       {/* 「為什麼不做」跟「要做什麼」一樣需要被說出口。
           沒有這句，連續幾週不動看起來就像資料壞掉。 */}
       {p?.reason && <span className="simnextwhy">{p.reason}</span>}
+
+      {/* 現在手上有什麼、花了多少。空手時講現金——那才是「還沒進場」的證據 */}
+      <span className="simnowline tnum" data-testid="sim-now">
+        {track.shares > 0
+          ? `現在 ${qtyText(track.shares, market)}，成本 ${money(track.cost, track.currency)}`
+          : `現在空手，現金 ${money(track.cash, track.currency)}`}
+      </span>
     </p>
   )
 }

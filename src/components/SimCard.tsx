@@ -121,9 +121,9 @@ export function SimCard({ tracks, market, symbolId }: {
         {aiLive || !ai ? '' : '　AI 那條還沒開始。'}
       </p>
 
+      {/* 「現在持股」與「現金」搬到上面的「明天開盤」那一行去了——
+          那是動作的前提，不是回顧的統計。這裡只留跟「準不準」有關的。 */}
       <dl className="simstats tnum">
-        <div><dt>現在持股</dt><dd>{market === 'TW' ? Math.round(lead.shares) : lead.shares.toFixed(4)} 股</dd></div>
-        <div><dt>現金</dt><dd>{money(lead.cash, cur)}</dd></div>
         {/* 「在市」是行話。真正要說的是「有幾天手上真的有股票，其餘都是現金」 */}
         <div><dt>有股票的天數</dt><dd>{lead.daysInMarket}/{lead.totalDays}（{inMarketPct}%）</dd></div>
         <div><dt>買賣次數</dt><dd>{lead.trades} 次</dd></div>
