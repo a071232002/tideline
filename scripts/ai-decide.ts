@@ -20,6 +20,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createAdminClient } from '../src/lib/supabase/admin'
 import { rebuildAll } from '../src/lib/sim/run'
+import { waitForIngestToFinish } from '../src/lib/jobs'
 import { buildPrompt, allowedNumbers, type AiFacts } from '../src/lib/ai/prompt'
 import { parseDecision } from '../src/lib/ai/decide'
 
@@ -74,6 +75,29 @@ async function logOnce(row: LogRow): Promise<boolean> {
 }
 
 async function main() {
+  /**
+   * 部署之後抓取在 Vercel、這支在本機，兩邊都會 `rebuildAll()`，
+   * 而重建是「整段刪掉再寫回去」——同時跑就會有人讀到半截的資金曲線。
+   *
+   * 不用「排程差五分鐘」擋：抓取的時間跟著標的數量長（6 檔 54 秒、
+   * 20 檔約三分鐘），固定時間差是一個會隨著多追蹤幾檔而悄悄失效的保護。
+   *
+   * 等不到也照樣往下做，只是記一筆。AI 這條線的價值在於每天都有判斷，
+   * 為了一個可能卡住的抓取而整天不判斷，是拿確定的損失換不確定的風險。
+   */
+  const wait = await waitForIngestToFinish({
+    fetchRows: async () => {
+      const { data } = await db.from('job_runs')
+        .select('started_at, finished_at').is('finished_at', null)
+        .order('started_at', { ascending: false }).limit(20)
+      return (data ?? []) as { started_at: string; finished_at: string | null }[]
+    },
+    log: (m) => console.log(m),
+  })
+  if (wait === 'timeout') {
+    console.log('⚠ 等抓取結束逾時，仍然繼續——帳戶可能是在寫入中的狀態下讀到的')
+  }
+
   const { data: users, error } = await db.auth.admin.listUsers()
   if (error) throw new Error(`讀取使用者失敗：${error.message}`)
 
