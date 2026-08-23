@@ -960,6 +960,15 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
   line-height: var(--lh-normal);
 }
+/* AI 還沒跟上最新那根 K 棒。用警示色，因為這是「有東西壞了」，
+   不是一個中性的狀態——排程掛掉時它是畫面上唯一的線索。 */
+.simaistale, .rsimstale {
+  font-size: var(--t-micro); font-weight: 700; color: var(--stop-ink);
+}
+.simaistale {
+  border: 1px solid var(--stop); border-radius: 99px; padding: 1px 8px;
+}
+
 /* 成交時點。它是決定的機械後果，不是決定本身——所以退到最小的字級 */
 .simfill { font-size: var(--t-micro); color: var(--muted); }
 

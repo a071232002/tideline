@@ -50,11 +50,13 @@ const qtyText = (q: number, market: 'TW' | 'US') =>
 const money = (v: number, cur: string) =>
   `${cur === 'TWD' ? 'NT$' : '$'}${Math.round(v).toLocaleString('en-US')}`
 
-export function SimNext({ track, ai, market }: {
+export function SimNext({ track, ai, market, latestBar }: {
   track: SimTrack | undefined
   /** AI 那條軌道。它還沒成交過的時候 `track` 會是規則軌，但 AI 仍然天天在判斷 */
   ai?: SimTrack | undefined
   market: 'TW' | 'US'
+  /** 最新一根 K 棒的日期。用來回答「AI 跟上了沒」 */
+  latestBar?: string
 }) {
   if (!track) return null
   // 還沒有交易日的帳戶沒有「決定」可言。這裡印「什麼都不用做」會像是
@@ -68,6 +70,17 @@ export function SimNext({ track, ai, market }: {
   const said = ai?.ai?.today
   const aiLed = track.track === 'ai'
 
+  /**
+   * **AI 跟上最新那根 K 棒了沒。**
+   *
+   * 只印訊號日的話，排程掛掉時畫面會顯示一個看起來很正常的舊判斷——
+   * 沒有錯誤、沒有空白，只是日期悄悄落後。實測 2026-08-23：午後那輪
+   * 排程從來沒觸發過，週五收盤的判斷拖到週日早上才做，而頁面上完全看不出來。
+   *
+   * 這跟頂欄的資料新鮮度是同一條規矩（§7）：**沉默會被讀成正常。**
+   */
+  const behind = said && latestBar && said.d < latestBar ? latestBar : null
+
   return (
     <p className={`simnext${act ? '' : ' quiet'}`} data-testid="sim-pending">
       {said && !aiLed && (
@@ -75,6 +88,11 @@ export function SimNext({ track, ai, market }: {
           <b>AI 判斷</b>
           <span className="simaiact">{aiActionText(said.action)}</span>
           <span className="simaid tnum">{said.d} 收盤後</span>
+          {behind && (
+            <span className="simaistale" data-testid="sim-ai-stale">
+              尚未判斷 {behind}
+            </span>
+          )}
           {said.reason && <span className="simaiwhy">{said.reason}</span>}
         </span>
       )}

@@ -278,6 +278,14 @@ export function WatchList({
                           {AI_ACTION[r.sim.aiToday.action] ?? r.sim.aiToday.action}</>
                         : <span className="rsimsub">AI 尚未判斷</span>}
                     </div>
+                    {/* AI 的判斷停在比這一列的資料日期更早的那天——排程沒跑完。
+                        不講的話畫面會顯示一個看起來很正常的舊判斷（實測 2026-08-23：
+                        午後那輪從來沒觸發，週五的判斷拖到週日早上才做）。 */}
+                    {r.sim.aiToday && r.d && r.sim.aiToday.d < r.d && (
+                      <div className="rsimstale" data-testid={`ai-stale-${r.code}`}>
+                        AI 停在 {r.sim.aiToday.d.slice(5)}
+                      </div>
+                    )}
 
                     {/* 投入多少錢比報酬率更早該回答——0% 可能是空手，也可能是真的沒賺。
                         但全部都沒投入時只在頁首講一次。 */}

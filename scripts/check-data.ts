@@ -74,7 +74,24 @@ if (stub.length > 0) {
     + `那會汙染回顧`)
 }
 
-// 6. 標的名稱不該是測試佔位字串
+// 6. 決策不能記在帳戶起算日之前
+//
+//    那種紀錄永遠不會被模擬到（重建只從起算日開始），但它會被算進
+//    「AI 判斷了幾天」，也會被畫面當成最新判斷顯示出來。
+const { data: aiAccs } = await db.from('sim_accounts')
+  .select('id, started_on, symbols(code)').eq('track', 'ai')
+for (const a of aiAccs ?? []) {
+  if (!a.started_on) continue
+  const { data: early } = await db.from('sim_ai_log')
+    .select('d').eq('account_id', a.id).lt('d', a.started_on as string)
+  if ((early ?? []).length > 0) {
+    const code = (a.symbols as unknown as { code: string })?.code ?? a.id
+    note(`${code}：有 ${early!.length} 筆 AI 決策早於帳戶起算日（${a.started_on}）——`
+      + `那些決策永遠不會被模擬到，卻會被當成最新判斷顯示`)
+  }
+}
+
+// 7. 標的名稱不該是測試佔位字串
 const { data: names } = await db.from('symbols').select('code, name_zh, name_en')
 for (const n of names ?? []) {
   const txt = `${n.name_zh ?? ''}${n.name_en ?? ''}`

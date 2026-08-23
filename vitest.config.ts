@@ -1,6 +1,13 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  // `@/` 是 tsconfig 的路徑別名，Next 認得、vitest 不認得。少了這一條，
+  // 任何用 `@/` import 的元件在單元測試裡都會炸在 resolve，
+  // 而那跟元件本身對不對完全無關。
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   // Next.js 用的是 automatic runtime（不必 import React）。vitest 的 esbuild
   // 預設是 classic，會在 .tsx 測試裡噴「React is not defined」。
   esbuild: { jsx: 'automatic' },

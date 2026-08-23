@@ -82,7 +82,8 @@ async function main() {
     await rebuildAll(user.id)
 
     const { data: accounts } = await db.from('sim_accounts')
-      .select('id, symbol_id, track, currency').eq('user_id', user.id)
+      .select('id, symbol_id, track, currency, started_on, initial_cash')
+      .eq('user_id', user.id)
 
     /**
      * **只問還在清單裡的標的。**
@@ -127,6 +128,23 @@ async function main() {
       if (!an) { console.log(`  ${code} 沒有分析資料，跳過`); continue }
 
       const signalD = an.d as string
+
+      /**
+       * **起算日之前的日子不問。**
+       *
+       * 週末或收盤前加進來的標的，帳戶的起算日會比最新那根 K 棒還新
+       * （帳戶照建，等下一個交易日才開跑——見 run.ts）。這時候去問模型，
+       * 問的是一個帳戶還不存在的日子：那筆決策永遠不會被模擬到，
+       * 而且餵進去的持股與現金全是 0，因為淨值表裡一列都還沒有。
+       *
+       * 實測 2026-08-23：00981A 08-23 加入，模型被問了 08-21，
+       * 回「現金 0、持股 0 無可執行」——一次額度換一筆廢紀錄。
+       */
+      const startedOn = acc.started_on as string | null
+      if (startedOn && signalD < startedOn) {
+        console.log(`  ${code} ${signalD} 早於起算日 ${startedOn}，跳過`)
+        continue
+      }
 
       // 已經決策過的日子不重問。腳本一天可能被跑好幾次
       const { data: already } = await db.from('sim_ai_log')
@@ -175,8 +193,14 @@ async function main() {
         levelWhy: lv.why ?? {},
         recentCloses: (bars ?? []).map((b) => Number(b.c)).reverse(),
         position: {
-          shares: Number(eq?.shares ?? 0), cash: Number(eq?.cash ?? 0),
-          cost: Number(eq?.cost ?? 0), equity: Number(eq?.equity ?? 0),
+          // 淨值表還沒有任何一列時，手上就是全額現金——不是 0。
+          // 上面的起算日檢查應該已經擋掉這種帳戶，但**餵錯數字的代價太大**：
+          // 數字驗證器只檢查「模型引用的數字有沒有出現在事實裡」，
+          // 它擋不住事實本身就是錯的。
+          shares: Number(eq?.shares ?? 0),
+          cash: Number(eq?.cash ?? acc.initial_cash ?? 0),
+          cost: Number(eq?.cost ?? 0),
+          equity: Number(eq?.equity ?? acc.initial_cash ?? 0),
           retPct: Number(eq?.ret_pct ?? 0),
         },
         ruleAction: pending
