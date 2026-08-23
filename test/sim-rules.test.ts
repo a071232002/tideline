@@ -40,8 +40,10 @@ const threeDays = (h: number, l: number) => [
   bar('2026-08-19', 100, 100, 100, 100),
 ]
 
-function run(bars: Bar[], days: Record<string, RuleDay>) {
-  return simulate(bars, ruleDecider(days, cfg.initialCash, DEFAULT_RULES), cfg)
+function run(bars: Bar[], days: Record<string, RuleDay>,
+  over: Partial<typeof DEFAULT_RULES> = {}) {
+  return simulate(
+    bars, ruleDecider(days, cfg.initialCash, { ...DEFAULT_RULES, ...over }), cfg)
 }
 
 describe('加碼：價格到了只是必要條件', () => {
@@ -147,6 +149,26 @@ describe('止損：收盤跌破止跌點', () => {
     const stop = r.trades.find((t) => t.triggers.includes('stop'))!
     expect(stop.fillD).toBe('2026-08-20')
     expect(stop.price).toBe(89)
+  })
+
+  /**
+   * `useStop: false` 只給 `scripts/experiment.ts` 用（PLAN §11 的對照實驗）。
+   * 它一定要**只影響止損**：如果它順手把減碼或加碼也關掉，那張對照表比較的
+   * 就不是「有沒有止損」，整個實驗的結論都會是錯的。
+   */
+  it('useStop: false → 不出清，而且其他規則照常', () => {
+    const r = run(bars, { '2026-08-17': goodAdd(), '2026-08-19': goodAdd() },
+      { useStop: false })
+    expect(r.trades.find((t) => t.triggers.includes('stop'))).toBeUndefined()
+    expect(r.state.shares).toBeGreaterThan(0)
+    // 加碼那一筆還在——這個開關不能連進場一起關掉
+    expect(r.trades.filter((t) => t.side === 'buy').length).toBeGreaterThan(0)
+  })
+
+  it('預設就是開著的——正式跑一律有止損', () => {
+    expect(DEFAULT_RULES.useStop).toBeUndefined()
+    const r = run(bars, { '2026-08-17': goodAdd(), '2026-08-19': goodAdd() })
+    expect(r.trades.find((t) => t.triggers.includes('stop'))).toBeDefined()
   })
 
   it('止損當天不會同時觸發加碼', () => {

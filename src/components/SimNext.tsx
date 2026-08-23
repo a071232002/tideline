@@ -1,4 +1,5 @@
 import type { SimTrack } from '@/lib/data'
+import { aiActionText } from '@/lib/sim/actions'
 import { Icon } from './Icon'
 
 /**
@@ -16,6 +17,14 @@ import { Icon } from './Icon'
  * **現在手上有什麼也放這裡。**「明天賣一半」要有意義，得先知道現在有幾股；
  * 那兩個數字原本分別在第 5 塊與第 11 塊，中間隔著決策條、整張圖與一個標題
  * ——手機上實測相距約 900px。「現在持股」是動作的前提，不是回顧的統計。
+ *
+ * **AI 今天判斷了什麼也放這裡，而且放在最前面。**
+ *
+ * 原本整個個股頁完全不會提到 AI：判斷「AI 上線了沒」是看它有沒有成交，
+ * 而它天天判斷、天天決定觀望，於是一筆成交都沒有。**「不進場」是一個決定，
+ * 不是沒有決定**——它是這個站的主角，不能因為結論是「不動」就消失。
+ *
+ * 兩條同時出現時要標清楚誰是誰：AI 是判斷，下面那行是規則的試算。
  */
 
 function verb(p: NonNullable<SimTrack['pending']>): string {
@@ -31,8 +40,10 @@ const qtyText = (q: number, market: 'TW' | 'US') =>
 const money = (v: number, cur: string) =>
   `${cur === 'TWD' ? 'NT$' : '$'}${Math.round(v).toLocaleString('en-US')}`
 
-export function SimNext({ track, market }: {
+export function SimNext({ track, ai, market }: {
   track: SimTrack | undefined
+  /** AI 那條軌道。它還沒成交過的時候 `track` 會是規則軌，但 AI 仍然天天在判斷 */
+  ai?: SimTrack | undefined
   market: 'TW' | 'US'
 }) {
   if (!track) return null
@@ -40,10 +51,22 @@ export function SimNext({ track, market }: {
   const act = p && (p.buy || p.sell)
   const est = p?.estimate ?? null
 
+  // AI 判斷過就要露臉，即使它一次都沒進場——那正是它的判斷
+  const said = ai?.ai?.today
+  const aiLed = track.track === 'ai'
+
   return (
     <p className={`simnext${act ? '' : ' quiet'}`} data-testid="sim-pending">
+      {said && !aiLed && (
+        <span className="simai" data-testid="sim-ai-today">
+          <b>AI 判斷</b>
+          <span className="simaiact">{aiActionText(said.action)}</span>
+          <span className="simaid tnum">{said.d}</span>
+          {said.reason && <span className="simaiwhy">{said.reason}</span>}
+        </span>
+      )}
       {act && <Icon name="chevronUp" />}
-      <b>明天開盤</b>
+      <b>{aiLed ? '明天開盤' : '規則試算・明天開盤'}</b>
       <span className="simnextact">{act ? verb(p) : '什麼都不用做'}</span>
 
       {/* 沒有股數與價位，這一行還是不能照做——讀完仍然不知道要在券商輸入什麼。

@@ -7,6 +7,7 @@ import { MarketFilter, type Filter } from './MarketFilter'
 import { Icon } from './Icon'
 import { levelStatus } from '@/lib/status'
 import { sortRows, type SortMode } from '@/lib/sorting'
+import { AI_ACTION } from '@/lib/sim/actions'
 import type { WatchRow } from '@/lib/data'
 
 function pct(v: number | null): string {
@@ -23,12 +24,6 @@ function money(v: number | null): string {
 const money0 = (v: number) => Math.round(v).toLocaleString('en-US')
 
 /** AI 今天決定了什麼，用白話寫。`buy_50` 這種內部代號不能直接端上桌 */
-const AI_ACTION: Record<string, string> = {
-  hold: '觀望',
-  buy_25: '買進 ¼ 現金', buy_50: '買進 ½ 現金', buy_100: '全部買進',
-  sell_25: '賣出 ¼ 持股', sell_50: '賣出 ½ 持股', sell_100: '全部賣出',
-}
-
 const SORTS: { key: SortMode; label: string }[] = [
   { key: 'attention', label: '該注意的' },
   { key: 'sim', label: '報酬' },

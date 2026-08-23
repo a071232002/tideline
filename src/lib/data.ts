@@ -410,6 +410,19 @@ export interface SimTrack {
     /** 用今日收盤估的明日成交量。不動作時是 null */
     estimate: { side: 'buy' | 'sell'; refPrice: number; qty: number; amount: number } | null
   } | null
+  /**
+   * AI 這條軌道的判斷紀錄。**只有 ai 軌道有。**
+   *
+   * 為什麼需要它：原本畫面判斷「AI 上線了沒」是看 `trades > 0`，
+   * 於是 AI 天天判斷、天天決定觀望的時候，整個個股頁完全不會提到 AI——
+   * 而這個站的主角就是 AI 的判斷。**「不進場」是一個決定，不是沒有決定。**
+   */
+  ai?: {
+    /** 已經判斷過幾天 */
+    days: number
+    /** 最新一次的判斷 */
+    today: { d: string; action: string; confidence: string | null; reason: string | null } | null
+  }
 }
 
 export async function getSim(symbolId: string): Promise<SimTrack[]> {
@@ -434,6 +447,23 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
     const curve = (eq ?? []).map((e) => ({ d: e.d as string, retPct: Number(e.ret_pct) }))
     const last = (eq ?? [])[eq!.length - 1]
     const trades = tr ?? []
+
+    // AI 的判斷紀錄。只查 ai 那一條——另外兩條沒有這種東西
+    let aiLog: SimTrack['ai']
+    if (acc.track === 'ai') {
+      const { data: logs } = await supabase
+        .from('sim_ai_log').select('d, action, confidence, reason')
+        .eq('account_id', id).eq('status', 'ok').order('d', { ascending: false })
+      const top = (logs ?? [])[0]
+      aiLog = {
+        days: (logs ?? []).length,
+        today: top ? {
+          d: top.d as string, action: (top.action as string) ?? 'hold',
+          confidence: (top.confidence as string) ?? null,
+          reason: (top.reason as string) ?? null,
+        } : null,
+      }
+    }
 
     out.push({
       track: acc.track as SimTrack['track'],
@@ -479,6 +509,7 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
         stop: ((t.triggers as string[]) ?? []).includes('stop'),
       })),
       pending: (acc.pending as SimTrack['pending']) ?? null,
+      ai: aiLog,
     })
   }
   return out

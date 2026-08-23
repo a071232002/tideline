@@ -145,7 +145,8 @@ export default async function StockPage({
 
       {/* 明日動作放在價位之前：那是結論，價位是它的依據。
           原本它在手機上位於第三屏（y=1604，視窗 780）。 */}
-      <SimNext track={simLead} market={page.symbol.market} />
+      <SimNext track={simLead} ai={sim.find((t) => t.track === 'ai')}
+        market={page.symbol.market} />
 
       <LevelStrip levels={strip} close={close} />
 

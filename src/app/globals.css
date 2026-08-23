@@ -947,6 +947,25 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
   line-height: var(--lh-normal);
 }
+/* AI 今天判斷了什麼。放在「明天開盤」之上——它是主角，
+   而規則那條是對照。兩條同時出現時各自標明身分，不然讀者不知道在看誰。 */
+.simai {
+  flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px;
+  border-bottom: 1px solid var(--line); margin-bottom: 8px; padding-bottom: 8px;
+}
+.simai > b { font-size: var(--t-body); }
+.simaiact { font-size: var(--t-lead); font-weight: 800; color: var(--ink); }
+.simaid { font-size: var(--t-micro); color: var(--muted); }
+.simaiwhy {
+  flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
+  line-height: var(--lh-normal);
+}
+/* 帳戶卡裡的第三條軌道，一句話 */
+.simai3 {
+  font-size: var(--t-body); color: var(--ink2);
+  line-height: var(--lh-normal); margin: 8px 0 0;
+}
+
 /* 現在手上有什麼。跟理由同一階——它是動作的前提，不是主角，
    但要能一眼在同一塊裡看到，不必捲到下面的帳戶卡。 */
 .simnowline {

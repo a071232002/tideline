@@ -83,6 +83,14 @@ export const DEFAULT_FEES: FeeParams = {
 }
 
 export interface RuleParams {
+  /**
+   * 止損要不要生效。**只給 `scripts/experiment.ts` 用，正式跑一律是 true。**
+   *
+   * 存在的理由是 §11 的問句：「跌破止跌就出清」到底幫了還是害了？
+   * 那個問題只能用「同一段資料、只差這一條規則」來回答，
+   * 而不是靠讀規格或看單一檔的曲線猜。
+   */
+  useStop?: boolean
   /** 分幾批進場。**這些是猜的**，跟 §4 的 k=3 一樣，驗收場是資金曲線本身 */
   batches: number
   /** 觸及賣出區時賣掉持股的多少。§4 的用詞是「減碼」不是出清 */

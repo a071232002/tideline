@@ -113,7 +113,7 @@ export function ruleDecider(
 
     // 1. 止損：收盤跌破。跌破了就不是減碼的事，兩者互斥、止損優先
     const stop = day.levels.stop?.price
-    if (stop !== undefined && state.shares > 0 && bar.c < stop) {
+    if (p.useStop !== false && stop !== undefined && state.shares > 0 && bar.c < stop) {
       cooldownUntilIndex = ctx.index + p.cooldownDays
       armed = false
       dipped = false

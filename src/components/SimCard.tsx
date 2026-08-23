@@ -118,8 +118,20 @@ export function SimCard({ tracks, market, symbolId }: {
         {excess >= 0
           ? `照建議進出，比買了不動多賺 ${excess.toFixed(2)}%。`
           : `照建議進出，反而比買了不動少賺 ${Math.abs(excess).toFixed(2)}%。`}
-        {aiLive || !ai ? '' : '　AI 那條還沒開始。'}
       </p>
+
+      {/* 第三條軌道。
+          原本只有一句「AI 那條還沒開始」——但它已經開始了，天天在判斷，
+          只是判斷的結果是不進場。把它講成「還沒開始」，等於把主角的決定
+          說成缺席。有幾天、決定了什麼、所以帳戶是多少，三件事講清楚。 */}
+      {ai?.ai && ai.ai.days > 0 && (
+        <p className="simai3" data-testid="sim-ai-track">
+          {aiLive
+            ? `規則那條同期是 ${pct(rule.retPct)}。`
+            : `AI 已經判斷 ${ai.ai.days} 天，到目前為止都選擇不進場——`
+              + `它的帳戶因此還是 ${pct(ai.retPct)}，整筆放在現金。`}
+        </p>
+      )}
 
       {/* 「現在持股」與「現金」搬到上面的「明天開盤」那一行去了——
           那是動作的前提，不是回顧的統計。這裡只留跟「準不準」有關的。 */}
