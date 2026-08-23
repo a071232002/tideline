@@ -81,6 +81,15 @@ export function SimNext({ track, ai, market, latestBar }: {
    */
   const behind = said && latestBar && said.d < latestBar ? latestBar : null
 
+  /**
+   * 兩條軌道都不動作時，規則那段不必再講一次理由。
+   *
+   * 實測 0050：AI 說「等回中軌 102.57 附近且 K<30 金叉再進場」，
+   * 規則說「K 44.0 還沒回到 30 以下，進場訊號未成立」——四行字，同一件事。
+   * 對照組存在的價值在**它們不同意的時候**；同意的時候並排兩段是雜訊。
+   */
+  const agree = said?.action === 'hold' && !act
+
   return (
     <p className={`simnext${act ? '' : ' quiet'}`} data-testid="sim-pending">
       {said && !aiLed && (
@@ -99,7 +108,9 @@ export function SimNext({ track, ai, market, latestBar }: {
       {act && <Icon name="chevronUp" />}
       <b>{aiLed ? '決定' : '規則試算'}</b>
       {p?.signalD && <span className="simaid tnum">{p.signalD} 收盤後</span>}
-      <span className="simnextact">{act ? verb(p) : '什麼都不用做'}</span>
+      <span className="simnextact">
+        {act ? verb(p) : agree ? '也是不動作' : '什麼都不用做'}
+      </span>
       {act && <span className="simfill">下一個開盤成交</span>}
 
       {/* 沒有股數與價位，這一行還是不能照做——讀完仍然不知道要在券商輸入什麼。
@@ -116,7 +127,7 @@ export function SimNext({ track, ai, market, latestBar }: {
 
       {/* 「為什麼不做」跟「要做什麼」一樣需要被說出口。
           沒有這句，連續幾週不動看起來就像資料壞掉。 */}
-      {p?.reason && <span className="simnextwhy">{p.reason}</span>}
+      {p?.reason && !agree && <span className="simnextwhy">{p.reason}</span>}
 
       {/* 現在手上有什麼、花了多少。空手時講現金——那才是「還沒進場」的證據 */}
       <span className="simnowline tnum" data-testid="sim-now">

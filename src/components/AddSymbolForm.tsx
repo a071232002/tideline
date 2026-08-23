@@ -17,6 +17,17 @@ import { Icon } from './Icon'
  * 但那是在解錯的問題：需要藏起來，是因為表單排成三列。排成一列就只有
  * 44px，跟收合鈕一樣高，沒有東西需要藏，也就不需要那顆按鈕。
  * 手機上順便脫掉卡片的外框與內距——一列輸入不需要一張卡。
+ *
+ * ## 市場為什麼是下拉，不是分段按鈕
+ *
+ * 原本是一組「台股｜美股」分段按鈕。問題是清單的市場篩選**也**是一組
+ * 「台股｜美股」膠囊，實測相距 33px（y=150 與 y=229）——同樣四個字、
+ * 幾乎同樣的形狀，一個決定「要新增哪個市場的標的」，另一個決定
+ * 「清單顯示哪些」。以前表單收在按鈕後面看不到，所以不會撞。
+ *
+ * 換成下拉之後，兩者的**外觀類別**就分開了：下拉是表單欄位，跟旁邊的
+ * 代號輸入框是同一類東西；膠囊是導覽，切換的是我看到什麼。形狀不同，
+ * 就不必靠讀字去分辨。順帶也拿回鍵盤操作——原本要自己接左右鍵。
  */
 export function AddSymbolForm() {
   const [state, action] = useActionState(
@@ -33,32 +44,19 @@ export function AddSymbolForm() {
     }
   }, [state?.ok])
 
-  /** 左右鍵切市場——手已經在鍵盤上就不必移到滑鼠 */
-  function onSegKey(e: React.KeyboardEvent) {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault()
-      setMarket((m) => (m === 'TW' ? 'US' : 'TW'))
-    }
-  }
-
   return (
     <form action={action} className="card addform" data-testid="add-form">
-      <div className="seg" role="radiogroup" aria-label="市場" onKeyDown={onSegKey}>
-        {(['TW', 'US'] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            role="radio"
-            aria-checked={market === m}
-            data-testid={`market-${m}`}
-            className={`segbtn${market === m ? ' on' : ''}`}
-            onClick={() => setMarket(m)}
-          >
-            {m === 'TW' ? '台股' : '美股'}
-          </button>
-        ))}
-      </div>
-      <input type="hidden" name="market" value={market} />
+      <select
+        className="input marketsel"
+        name="market"
+        aria-label="市場"
+        data-testid="add-market"
+        value={market}
+        onChange={(e) => setMarket(e.target.value as 'TW' | 'US')}
+      >
+        <option value="TW">台股</option>
+        <option value="US">美股</option>
+      </select>
 
       <input
         ref={codeRef}

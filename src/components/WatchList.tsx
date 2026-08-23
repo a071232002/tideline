@@ -180,7 +180,9 @@ export function WatchList({
           <span>收盤</span>
           {/* 標籤已經貼在每個數字旁邊（賣／止／加），表頭不必再排三個 */}
           <span>關鍵價位</span>
-          <span>照建議做</span>
+          {/* 這一欄現在放的是 AI 的判斷（外加有投入時的成本與報酬），
+              不是規則軌道的績效——欄頭要跟著內容走 */}
+          <span>AI 判斷</span>
           <span />
         </div>
       )}
@@ -214,7 +216,7 @@ export function WatchList({
                 {/* 市場用極小的灰字，不用有框的徽章——上面的篩選列已經在講市場，
                     每列再來一顆膠囊只是視覺噪音 */}
                 <span className="mkt">{r.market}</span>
-                <div className="rname">{r.name ?? ''}</div>
+                <div className="rname" title={r.name ?? ''}>{r.name ?? ''}</div>
                 {st.kind !== 'none' && (
                   <span className={`statusbadge tone-${st.tone}`} data-testid={`status-${r.code}`}>
                     {st.label}

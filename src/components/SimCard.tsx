@@ -92,6 +92,18 @@ export function SimCard({ tracks, market, symbolId }: {
     )
   }
 
+  /**
+   * 樣本太短。
+   *
+   * 三個交易日的「差距 −0.29%」用 24px 粗體印出來，旁邊還配一句肯定的
+   * 「照建議進出，反而比買了不動少賺 0.29%」——那個語氣不是資料支持的。
+   * 樣本數本來就有顯示，但它在最底下的灰字裡，份量跟結論句差了一個數量級。
+   *
+   * 十天這個界線跟清單頁首同一個（WatchList 的「還看不出結果」），
+   * 不是另訂一套。短的時候：數字降一級、結論句換成但書。
+   */
+  const tooShort = lead.totalDays < 10
+
   // 每批買不到 14,036 元就一直在撞最低手續費，那不是在測規則是在測手續費（§13.2）
   const perBatch = rule.initialCash / 3
   const tooSmall = market === 'TW' && perBatch < 14036
@@ -114,7 +126,7 @@ export function SimCard({ tracks, market, symbolId }: {
 
       {/* 「明日開盤將執行」不在這張卡裡——它被移到決策條下方（SimNext.tsx）。
           這張卡是回顧，那一行是指令，兩種閱讀狀態不要混在一起。 */}
-      <div className="simscores">
+      <div className={`simscores${tooShort ? ' short' : ''}`}>
         <div className="simscore lead">
           <div className="lab">{LABEL[lead.track]}</div>
           <div className={`num tnum ${lead.retPct >= 0 ? 'chg-up' : 'chg-down'}`}
@@ -134,11 +146,14 @@ export function SimCard({ tracks, market, symbolId }: {
         </div>
       </div>
 
-      {/* 一句話的結論，而且要說出**多賺還是少賺**，不要只丟一個正負號 */}
-      <p className="simwhy">
-        {excess >= 0
-          ? `照建議進出，比買了不動多賺 ${excess.toFixed(2)}%。`
-          : `照建議進出，反而比買了不動少賺 ${Math.abs(excess).toFixed(2)}%。`}
+      {/* 一句話的結論，而且要說出**多賺還是少賺**，不要只丟一個正負號。
+          但樣本太短的時候，「多賺／少賺」這個語氣本身就是過度解讀。 */}
+      <p className="simwhy" data-testid="sim-verdict">
+        {tooShort
+          ? `樣本只有 ${lead.totalDays} 個交易日，這個差距還讀不出意義。`
+          : excess >= 0
+            ? `照建議進出，比買了不動多賺 ${excess.toFixed(2)}%。`
+            : `照建議進出，反而比買了不動少賺 ${Math.abs(excess).toFixed(2)}%。`}
       </p>
 
       {/* 第三條軌道。

@@ -234,8 +234,14 @@ export default async function StockPage({
 
       {/* 估值是**基本面**，跟上面整段技術分析不是同一件事——
           它自己一段，才不會被當成價位的依據之一。
-          §3 也明講過：估值不參與價位計算。 */}
-      <h2 className="secttl" data-testid="sect-value">另一個角度：估值</h2>
+          §3 也明講過：估值不參與價位計算。
+
+          但沒有估值可講的時候（ETF 永遠如此），一個段落標題加一張卡去裝
+          一句「這裡沒有東西」是本末倒置——三行外框裝一行內容。
+          那種情況下標題收起來，只留那一句。 */}
+      {page.valuation && (
+        <h2 className="secttl" data-testid="sect-value">另一個角度：估值</h2>
+      )}
       <ValuationCard valuation={page.valuation} market={page.symbol.market}
         code={page.symbol.code} />
     </main>

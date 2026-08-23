@@ -326,6 +326,20 @@ a { color: inherit; }
   align-items: center;
 }
 .addform .err, .addform .okmsg { grid-column: 1 / -1; margin: 2px 0 0; }
+/* 標的名稱最多兩行。
+   台股 ETF 沒有中文名時會掉回 Yahoo 的英文全名——00981A 是
+   「Uni-President Asset Management Corp - UPAMC Taiwan Growth Active ETF」，
+   實測桌機四行、名稱區塊 79px（別人 20px），整列被撐到 141px（別人 92～114）。
+   名字是**認出是哪一檔**用的，代號已經做完那件事了，第三行以後沒有作用。
+   完整名稱留在 title，滑過看得到。 */
+.rname {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 市場下拉。刻意跟旁邊的代號輸入框同一個外觀——它們是同一類東西（表單欄位），
+   而清單的市場篩選是膠囊（導覽）。形狀分開，就不必靠讀字分辨。 */
+.marketsel { padding-right: 8px; cursor: pointer; }
 .okmsg { font-size: var(--t-body); color: var(--buy); }
 
 /* 手機上排成一列：市場、代號、加入。
@@ -960,6 +974,10 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
   line-height: var(--lh-normal);
 }
+/* 樣本太短時三個數字降一級。24px 粗體的「差距 −0.29%」配三個交易日，
+   字級本身就在宣稱一個資料撐不住的結論。 */
+.simscores.short .num { font-size: var(--n-sm); }
+
 /* AI 還沒跟上最新那根 K 棒。用警示色，因為這是「有東西壞了」，
    不是一個中性的狀態——排程掛掉時它是畫面上唯一的線索。 */
 .simaistale, .rsimstale {
