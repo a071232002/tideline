@@ -1,10 +1,33 @@
-﻿# Tideline 每日抓取。由 Windows 工作排程器呼叫。
+﻿# Tideline 每日排程。由 Windows 工作排程器呼叫。
 #
 # 為什麼不是直接跑 npm：本機 Supabase 跑在 podman 上，而 podman machine
 # 開機不會自動啟動。少了這段，重開機後排程會安靜地失敗——你隔天只會看到
 # 「資料未更新」，卻不知道是因為容器沒起來。
 #
 # 這個檔存成 UTF-8 with BOM。PowerShell 5.1 沒有 BOM 會當成 ANSI 讀，中文變亂碼。
+#
+# ## 兩種模式
+#
+# 全本機（現在）：
+#     daily.ps1
+#     抓取 + AI 都在這裡跑，資料庫是 podman 上的 Supabase。
+#
+# 雲端（部署後）：
+#     daily.ps1 -EnvFile .env.cloud -SkipIngest
+#     抓取由 Vercel Cron 做，這台機器**只跑 AI**——因為 ai-decide 要
+#     spawn 本機的 `claude` 二進位，那是整條線上唯一上不了雲的東西。
+#
+# **`-EnvFile` 一定要分開。** `.env.local` 指向本機 Supabase，而開發、
+# 單元測試、E2E 全部讀它。要是把它改成指向雲端，E2E 下一次執行就會
+# 直接對正式資料庫跑——那正是這個專案一直想避免的事。
+
+param(
+  # 讀哪一份環境變數。雲端 AI runner 用 .env.cloud，兩份都不進版。
+  [string]$EnvFile = '.env.local',
+  # 抓取交給 Vercel Cron 的時候加這個。同一份資料被兩邊各抓一次沒有好處，
+  # 而且兩邊會同時重建模擬帳戶。
+  [switch]$SkipIngest
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -26,16 +49,37 @@ function Write-Log($msg) {
 }
 
 function Test-Supabase {
+  # 位址從環境變數來，不要寫死 127.0.0.1——雲端模式要檢查的是雲端那台
+  if (-not $env:NEXT_PUBLIC_SUPABASE_URL) { return $false }
   try {
-    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:54421/auth/v1/health' -TimeoutSec 5 -UseBasicParsing
+    $r = Invoke-WebRequest -Uri ($env:NEXT_PUBLIC_SUPABASE_URL.TrimEnd('/') + '/auth/v1/health') `
+      -TimeoutSec 10 -UseBasicParsing
     return $r.StatusCode -eq 200
   } catch { return $false }
 }
 
-Write-Log '--- 開始 ---'
+Write-Log ('--- 開始（' + $EnvFile + (& { if ($SkipIngest) { '，只跑 AI' } else { '' } }) + '） ---')
 
-# 1. 確保 Supabase 起得來
+# 1. 讀環境變數。要在檢查 Supabase 之前——健康檢查的位址就從這裡來。
+$envPath = Join-Path $proj $EnvFile
+if (-not (Test-Path $envPath)) {
+  Write-Log "X 找不到 $EnvFile，這次跳過"
+  exit 1
+}
+Get-Content $envPath | ForEach-Object {
+  if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+    Set-Item -Path ('env:' + $matches[1]) -Value $matches[2].Trim()
+  }
+}
+
+$isLocalDb = $env:NEXT_PUBLIC_SUPABASE_URL -match '127\.0\.0\.1|localhost'
+
+# 2. 確保 Supabase 活著。本機的話還可以自己叫醒它；雲端的話只能回報。
 if (-not (Test-Supabase)) {
+  if (-not $isLocalDb) {
+    Write-Log 'X 連不上雲端 Supabase，這次跳過。'
+    exit 1
+  }
   Write-Log 'Supabase 沒有回應，嘗試啟動 podman machine'
   try { podman machine start 2>&1 | Out-Null } catch { Write-Log "podman machine start: $_" }
 
@@ -60,17 +104,15 @@ if (-not (Test-Supabase)) {
   Write-Log 'Supabase 已就緒'
 }
 
-# 2. 讀 .env.local（service role key 不進版，只在這台機器上）
-Get-Content (Join-Path $proj '.env.local') | ForEach-Object {
-  if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
-    Set-Item -Path ('env:' + $matches[1]) -Value $matches[2].Trim()
-  }
+# 3. 抓取。雲端模式跳過——那是 Vercel Cron 的工作。
+$code = 0
+if ($SkipIngest) {
+  Write-Log '略過抓取（由 Vercel Cron 負責）'
+} else {
+  $out = & npm run ingest 2>&1
+  $code = $LASTEXITCODE
+  $out | ForEach-Object { Write-Log $_ }
 }
-
-# 3. 抓取
-$out = & npm run ingest 2>&1
-$code = $LASTEXITCODE
-$out | ForEach-Object { Write-Log $_ }
 
 # 4. AI 帳戶的每日決策（PLAN §13.5）。
 #
@@ -78,7 +120,8 @@ $out | ForEach-Object { Write-Log $_ }
 # 它掛掉隔天頁面照常，只是 AI 那條曲線多一天沒跑到。所以先判斷抓取成功、
 # 再跑 AI，而且它的結果不改變這支腳本的離開碼。
 if ($code -eq 0) {
-  Write-Log '--- 抓取完成，開始 AI 決策 ---'
+  Write-Log (& { if ($SkipIngest) { '--- 開始 AI 決策 ---' }
+                 else { '--- 抓取完成，開始 AI 決策 ---' } })
   try {
     $ai = & npm run ai 2>&1
     $ai | ForEach-Object { Write-Log $_ }
