@@ -83,7 +83,20 @@ async function main() {
 
     const { data: accounts } = await db.from('sim_accounts')
       .select('id, symbol_id, track, currency').eq('user_id', user.id)
-    const aiAccounts = (accounts ?? []).filter((a) => a.track === 'ai')
+
+    /**
+     * **只問還在清單裡的標的。**
+     *
+     * 帳戶移出清單不刪除（sim_ai_log 不能重建），但 `rebuildAll` 只重建
+     * 清單裡的——所以對移出的標的問模型，等於花一次 API 額度換一筆
+     * 永遠不會被模擬到的決策。實測 dev 的 2454 就是這樣天天被問。
+     */
+    const { data: watched } = await db.from('watchlist')
+      .select('symbol_id').eq('user_id', user.id)
+    const inList = new Set((watched ?? []).map((w) => w.symbol_id as string))
+
+    const aiAccounts = (accounts ?? [])
+      .filter((a) => a.track === 'ai' && inList.has(a.symbol_id as string))
     if (aiAccounts.length === 0) continue
 
     if (ONLY_USER && user.email !== ONLY_USER) continue

@@ -216,7 +216,6 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
         date: b.d as string, o: Number(b.o), h: Number(b.h),
         l: Number(b.l), c: Number(b.c), v: Number(b.v ?? 0),
       }))
-    if (bars.length === 0) continue
 
     const actions: CorporateAction[] = (actRows ?? []).map((a) => ({
       date: a.d as string,
@@ -243,6 +242,27 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
       for (const t of TRACKS) {
         out.push({ code: sym.code, track: t, trades: 0, retPct: 0, daysInMarket: 0,
           totalFees: 0, pending: null, skipped: '沒有匯率，美股帳戶無法開帳' })
+      }
+      continue
+    }
+
+    /**
+     * 起算日之後還沒有任何交易日——**帳戶照建，只是還沒得跑。**
+     *
+     * 週末或收盤前加進來的標的就是這樣：起算日是今天，而最新的 K 棒是
+     * 上一個交易日。原本這裡直接 `continue`，結果是帳戶根本沒被建立、
+     * 也沒有留下任何紀錄——畫面上那一列沒有模擬、沒有 AI，也沒有一句話
+     * 說明為什麼（實測 2026-08-23 週日加入的 00981A）。
+     *
+     * 帳戶建起來，起算日就記住了；下一個交易日的抓取一跑，它自己會接上。
+     */
+    if (bars.length === 0) {
+      for (const t of TRACKS) {
+        await ensureAccount(userId, sym, t, {
+          capitalTwd: capitalForSymbol, initialCash, fxAtOpen, startedOn,
+        })
+        out.push({ code: sym.code, track: t, trades: 0, retPct: 0, daysInMarket: 0,
+          totalFees: 0, pending: null, skipped: `${startedOn} 起追蹤，還沒有交易日` })
       }
       continue
     }

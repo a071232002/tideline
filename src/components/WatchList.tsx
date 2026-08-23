@@ -153,7 +153,10 @@ export function WatchList({
       {summary.n > 0 && (
         <div className="simtotal" data-testid="sim-total">
           <div className="simtotalmain">
-            <span className="lab">明天開盤</span>
+            {/* 「明天開盤」讀起來像在猜明天。單已經下了——訊號是收盤、
+                資訊到齊之後才產生的，成交排在下一個開盤只是因為那是
+                決定之後第一個真的碰得到的價格。所以講「已決定」。 */}
+            <span className="lab">收盤後已決定</span>
             <span className={`simtotalpct ${todoCount > 0 ? 'chg-up' : ''}`}>
               {todoCount > 0 ? `${todoCount} 檔要動作` : '沒有要動作的'}
             </span>

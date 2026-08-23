@@ -71,6 +71,27 @@ export function SimCard({ tracks, market, symbolId }: {
     : lead.curve.length
   const idleWhy = last?.triggers.includes('stop') ? '止損出清後' : '上次減碼後'
 
+  /**
+   * 起算日之後還沒有任何交易日。
+   *
+   * 週末或收盤前加進來的標的就是這樣。這時候整張卡的每個數字都是 0，
+   * 印出來會被讀成「跑過了、結果是零」——但實際上是還沒開始。
+   * 講一句話就好，不要給一張全是零的成績單。
+   */
+  if (lead.totalDays === 0) {
+    return (
+      <section className="card sim" data-testid="sim-card">
+        <div className="simhead"><h2>如果照建議做</h2></div>
+        <p className="simlede" data-testid="sim-not-started">
+          從 <b className="tnum">{lead.startedOn}</b> 起追蹤，
+          用 <b className="tnum">{money(lead.initialTwd, 'TWD')} 元</b> 模擬。
+          <b>還沒有交易日</b>——下一個開盤日抓到資料之後就會開始，
+          AI 的第一筆判斷也在那時。
+        </p>
+      </section>
+    )
+  }
+
   // 每批買不到 14,036 元就一直在撞最低手續費，那不是在測規則是在測手續費（§13.2）
   const perBatch = rule.initialCash / 3
   const tooSmall = market === 'TW' && perBatch < 14036
@@ -206,7 +227,7 @@ export function SimCard({ tracks, market, symbolId }: {
           但「未扣股利所得稅與二代健保」是細節的細節，
           而「AI 軌道尚未開始」是狀態不是假設——前者移進摺疊區，後者上移到結論那句。 */}
       <p className="fine" data-testid="sim-assumptions">
-        次日開盤成交・含手續費與證交稅・未計滑價
+        收盤後決定、次日開盤成交・含手續費與證交稅・未計滑價
         {market === 'TW' ? '・以零股計算・配息以現金入帳' : '・允許小數股'}
         ・樣本 {rule.totalDays} 個交易日・<b>不代表實際可獲得之報酬</b>
       </p>

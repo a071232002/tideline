@@ -960,6 +960,9 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
   line-height: var(--lh-normal);
 }
+/* 成交時點。它是決定的機械後果，不是決定本身——所以退到最小的字級 */
+.simfill { font-size: var(--t-micro); color: var(--muted); }
+
 /* 帳戶卡裡的第三條軌道，一句話 */
 .simai3 {
   font-size: var(--t-body); color: var(--ink2);

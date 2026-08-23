@@ -25,6 +25,16 @@ import { Icon } from './Icon'
  * 不是沒有決定**——它是這個站的主角，不能因為結論是「不動」就消失。
  *
  * 兩條同時出現時要標清楚誰是誰：AI 是判斷，下面那行是規則的試算。
+ *
+ * ## 講法：決定在前，成交在後
+ *
+ * 原本這一行的開頭是「明天開盤」，讀起來像在猜明天會怎樣。實際上不是：
+ * **訊號是第 i 天收盤、資訊到齊之後才產生的**（engine.ts 開頭那一行），
+ * 單已經下了，「明天」講的只是這張單什麼時候成交。
+ *
+ * 而成交必須排在下一個開盤，因為用當天收盤成交等於「跌破的瞬間就跑掉了」，
+ * 那個價格在決定之前就已經印出來了。所以先說哪一天決定了什麼，
+ * 再把成交時點當作機械後果附在後面。
  */
 
 function verb(p: NonNullable<SimTrack['pending']>): string {
@@ -47,6 +57,9 @@ export function SimNext({ track, ai, market }: {
   market: 'TW' | 'US'
 }) {
   if (!track) return null
+  // 還沒有交易日的帳戶沒有「決定」可言。這裡印「什麼都不用做」會像是
+  // 跑過一輪的結論，實際上是還沒開始——那句話由帳戶卡負責講。
+  if (track.totalDays === 0) return null
   const p = track.pending
   const act = p && (p.buy || p.sell)
   const est = p?.estimate ?? null
@@ -61,13 +74,15 @@ export function SimNext({ track, ai, market }: {
         <span className="simai" data-testid="sim-ai-today">
           <b>AI 判斷</b>
           <span className="simaiact">{aiActionText(said.action)}</span>
-          <span className="simaid tnum">{said.d}</span>
+          <span className="simaid tnum">{said.d} 收盤後</span>
           {said.reason && <span className="simaiwhy">{said.reason}</span>}
         </span>
       )}
       {act && <Icon name="chevronUp" />}
-      <b>{aiLed ? '明天開盤' : '規則試算・明天開盤'}</b>
+      <b>{aiLed ? '決定' : '規則試算'}</b>
+      {p?.signalD && <span className="simaid tnum">{p.signalD} 收盤後</span>}
       <span className="simnextact">{act ? verb(p) : '什麼都不用做'}</span>
+      {act && <span className="simfill">下一個開盤成交</span>}
 
       {/* 沒有股數與價位，這一行還是不能照做——讀完仍然不知道要在券商輸入什麼。
           明天的開盤價當然不知道，所以用今日收盤估，並且明講是估的。 */}

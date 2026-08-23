@@ -403,7 +403,12 @@ export interface SimTrack {
   marks: { d: string; side: 'buy' | 'sell'; price: number; stop: boolean }[]
   /** 完整統計（最大回落、賣出賺錢幾次、被止損幾次）。回顧收進個股頁之後才需要 */
   stats: TrackStats
-  /** 明天開盤要做的事。這是整張卡最重要的一行——一句可以照做的指令 */
+  /**
+   * 收盤後已經決定、還沒成交的那一張單。這是整張卡最重要的一行。
+   *
+   * 名字叫 pending 是因為**成交**還沒發生，不是因為決定還沒做——
+   * 決定在第 i 天收盤後就定案了（engine.ts 開頭）。
+   */
   pending: {
     signalD: string; buy: boolean; sell: boolean
     triggers: string[]; reason: string | null
@@ -417,6 +422,8 @@ export interface SimTrack {
    * 於是 AI 天天判斷、天天決定觀望的時候，整個個股頁完全不會提到 AI——
    * 而這個站的主角就是 AI 的判斷。**「不進場」是一個決定，不是沒有決定。**
    */
+  /** 帳戶從哪天起算。曲線還是空的時候，只有它說得出「在等什麼」 */
+  startedOn: string
   ai?: {
     /** 已經判斷過幾天 */
     days: number
@@ -427,9 +434,25 @@ export interface SimTrack {
 
 export async function getSim(symbolId: string): Promise<SimTrack[]> {
   const supabase = await createClient()
+
+  /**
+   * **移出清單之後就不要再顯示這個帳戶。**
+   *
+   * 帳戶不會隨著移出清單被刪掉（那會連 sim_ai_log 一起帶走，而那是唯一
+   * 不能重建的東西）。但 `rebuildAll` 只跑清單裡的標的——所以移出之後
+   * 帳戶就凍在那一天，畫面卻照樣把它當成現況。
+   *
+   * 實測 2026-08-23：dev 的 2454 早就移出清單，個股頁仍然顯示一個
+   * 停在 08-19 的帳戶，旁邊卻掛著 08-21 的 AI 判斷——同一塊區域兩個日期，
+   * 而且那個報酬率是兩天前的。凍結的數字比沒有數字更糟。
+   */
+  const { data: watched } = await supabase
+    .from('watchlist').select('symbol_id').eq('symbol_id', symbolId).maybeSingle()
+  if (!watched) return []
+
   const { data: accounts } = await supabase
     .from('sim_accounts')
-    .select('id, track, initial_twd, initial_cash, currency, pending')
+    .select('id, track, initial_twd, initial_cash, currency, pending, started_on')
     .eq('symbol_id', symbolId)
   if (!accounts || accounts.length === 0) return []
 
@@ -509,6 +532,7 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
         stop: ((t.triggers as string[]) ?? []).includes('stop'),
       })),
       pending: (acc.pending as SimTrack['pending']) ?? null,
+      startedOn: acc.started_on as string,
       ai: aiLog,
     })
   }

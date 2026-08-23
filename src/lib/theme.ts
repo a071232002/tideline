@@ -6,7 +6,11 @@
  * 就變成 `localStorage.getItem(undefined)`，主題永遠讀不回來。
  */
 export const THEME_KEY = 'tideline-theme'
-export type Theme = 'system' | 'light' | 'dark'
+/**
+ * 只有兩態。「跟隨系統」不在這裡——它是**沒有存過選擇**時的預設行為，
+ * 由 CSS 的 prefers-color-scheme 負責，不是一個可以被存起來的值。
+ */
+export type Theme = 'light' | 'dark'
 
 /**
  * 圖層開關也記住。
