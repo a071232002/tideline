@@ -53,6 +53,7 @@ export function WatchList({
 }) {
   const [filter, setFilter] = useState<Filter>('ALL')
   const [sort, setSort] = useState<SortMode>('attention')
+  const [query, setQuery] = useState('')
 
   const counts = useMemo(() => ({
     ALL: rows.length,
@@ -81,7 +82,25 @@ export function WatchList({
   const summary = useMemo(() => {
     const withSim = rows.filter((r) => r.sim)
     const aiLed = withSim.filter((r) => r.sim!.lead === 'ai').length
-    return { n: withSim.length, aiLed }
+
+    /**
+     * 每一列都一樣的東西，上移到頁首講一次。
+     *
+     * 實測四列的模擬格裡有三行字完全相同（AI 觀望／現金 50,000／
+     * 追蹤 3 天（08-19 起），太短）——十二行重複。
+     *
+     * 這個站已經有處理它的先例：資料日期只在「這一檔跟其他檔不同步」時才印，
+     * 因為四列印同一個日期是廢話。同一個模式套到起算日與追蹤天數。
+     */
+    const starts = withSim.map((r) => r.sim!.startedOn)
+    const days = withSim.map((r) => r.sim!.days)
+    const uniformStart = starts.length > 0 && starts.every((d) => d === starts[0])
+    const uniformDays = days.length > 0 && days.every((d) => d === days[0])
+    return {
+      n: withSim.length, aiLed,
+      commonStart: uniformStart ? starts[0]! : null,
+      commonDays: uniformDays ? days[0]! : null,
+    }
   }, [rows])
 
   // `pending` 不動作時也存在（要帶「為什麼不做」的理由），所以一律看 buy/sell。
@@ -91,14 +110,36 @@ export function WatchList({
     [rows])
 
   const shown = useMemo(() => {
-    const filtered = filter === 'ALL' ? rows : rows.filter((r) => r.market === filter)
+    const q = query.trim().toLowerCase()
+    const filtered = rows
+      .filter((r) => filter === 'ALL' || r.market === filter)
+      // 代號與名稱都比對。使用者記得的可能是「台積電」也可能是 2330，
+      // 只比對其中一種就會有一半的時候找不到
+      .filter((r) => q === ''
+        || r.code.toLowerCase().includes(q)
+        || (r.name ?? '').toLowerCase().includes(q))
     return sortRows(filtered, sort)
-  }, [rows, filter, sort])
+  }, [rows, filter, sort, query])
 
   return (
     <>
       <div className="listbar">
         <MarketFilter counts={counts} onChange={setFilter} />
+        {/* 搜尋。清單長到十幾檔就只能用眼睛找，而市場篩選只有兩個維度。
+            Esc 清空——這是暫時的縮小範圍，不是設定。 */}
+        <div className="searchwrap">
+          <input
+            type="search"
+            className="input searchinput"
+            data-testid="search"
+            placeholder="找代號或名稱"
+            aria-label="搜尋觀察清單"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setQuery('') }}
+          />
+        </div>
+
         <div className="sortbar" role="group" aria-label="排序">
           {SORTS.map((s) => (
             <button key={s.key} type="button"
@@ -123,6 +164,10 @@ export function WatchList({
           <span className="fine">
             {summary.n} 檔在模擬
             {summary.aiLed > 0 ? `・${summary.aiLed} 檔由 AI 判斷` : '・AI 尚未開始'}
+            {/* 全部一樣的起算日與天數只講一次，列裡就不必重複四遍 */}
+            {summary.commonStart && `・都自 ${summary.commonStart.slice(5)} 起`}
+            {summary.commonDays !== null && `追蹤 ${summary.commonDays} 天`}
+            {summary.commonDays !== null && summary.commonDays < 10 && '（還看不出結果）'}
           </span>
         </div>
       )}
@@ -143,7 +188,9 @@ export function WatchList({
           <p className="empty" data-testid="empty-filtered">
             {rows.length === 0
               ? '清單還是空的。上面選好市場、輸入代號，加入第一檔。'
-              : `目前的篩選（${filter === 'TW' ? '台股' : '美股'}）沒有標的。`}
+              : query.trim() !== ''
+                ? `沒有符合「${query.trim()}」的標的。`
+                : `目前的篩選（${filter === 'TW' ? '台股' : '美股'}）沒有標的。`}
           </p>
         </div>
       ) : (
@@ -232,17 +279,18 @@ export function WatchList({
 
                     {/* 投入多少錢比報酬率更早該回答——0% 可能是空手，也可能是真的沒賺 */}
                     <div className="rsimsub tnum">
-                      {r.sim.cost > 0
-                        ? `投入 ${money0(r.sim.cost)}`
-                        : `現金 ${money0(r.sim.initialTwd)}`}
+                      {r.sim.cost > 0 ? `投入 ${money0(r.sim.cost)}` : '未投入'}
                     </div>
 
                     {/* 追蹤天數太少時，報酬率是雜訊不是結果，不要讓它當主角。
-                        天數與起算日併一行——兩行講同一件事是重複。 */}
+                        **但只在跟其他檔不同步時才印**——每列都一樣的話，
+                        頁首那一行已經講過了。 */}
                     {r.sim.days < 10 ? (
-                      <div className="rsimsub" data-testid={`young-${r.code}`}>
-                        追蹤 {r.sim.days} 天（{r.sim.startedOn.slice(5)} 起），太短
-                      </div>
+                      summary.commonDays === null && (
+                        <div className="rsimsub" data-testid={`young-${r.code}`}>
+                          追蹤 {r.sim.days} 天（{r.sim.startedOn.slice(5)} 起），太短
+                        </div>
+                      )
                     ) : (
                       <>
                         {/* 這個數字是哪一條軌道的，一定要標出來——
@@ -263,7 +311,8 @@ export function WatchList({
                       </>
                     )}
 
-                    {r.sim.days >= 10 && (
+                    {/* 起算日同上：只有跟其他檔不同才需要指出來 */}
+                    {r.sim.days >= 10 && summary.commonStart === null && (
                       <div className="rsimsub">自 {r.sim.startedOn.slice(5)}</div>
                     )}
                   </>

@@ -1164,3 +1164,11 @@ main > .secttl:first-of-type { margin-top: 16px; }
 .stripwhys dl { margin: 0 0 8px; }
 .stripwhys dt { font-weight: 700; margin-top: 8px; }
 .stripwhys dd { margin: 2px 0 0; color: var(--ink2); line-height: var(--lh-normal); }
+
+/* 搜尋框。放在篩選與排序之間——它跟它們是同一類動作（縮小範圍），
+   不該跟「加入標的」擠在一起，那是新增。 */
+.searchwrap { flex: 1 1 150px; min-width: 0; max-width: 240px; }
+.searchinput { width: 100%; font-size: var(--t-label); }
+@media (max-width: 560px) {
+  .searchwrap { flex: 1 1 100%; max-width: none; order: 3; }
+}

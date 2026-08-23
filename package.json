@@ -19,7 +19,8 @@
     "backfill": "tsx scripts/backfill.ts",
     "fx": "tsx scripts/fx.ts",
     "sim": "tsx scripts/sim-backfill.ts",
-    "ai": "tsx scripts/ai-decide.ts"
+    "ai": "tsx scripts/ai-decide.ts",
+    "check:data": "tsx scripts/check-data.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

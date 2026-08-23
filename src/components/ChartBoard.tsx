@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { LAYERS_KEY } from '@/lib/theme'
 import { PriceChart, KdChart, W_NARROW } from './Charts'
 import { GapPanel } from './GapPanel'
 
@@ -14,8 +15,13 @@ import { GapPanel } from './GapPanel'
  * 布林通道、關鍵價位、KD、與買了不動的差距。預設只開買賣點，
  * 因為那是「這個帳戶做了什麼」，其他都是佐證。
  *
- * 切換狀態不寫進網址也不存起來：這是「我現在想多看一眼」的臨時動作，
- * 不是設定。留下來反而會讓下次打開時看到一張自己不記得為什麼長這樣的圖。
+ * **切換狀態會記住**（localStorage，跟主題同一個機制）。
+ *
+ * 原本刻意不存，理由是「臨時動作不是設定」。但如果每次進頁面都要重開
+ * 同樣那幾個圖層，那它就是設定——判斷標準是使用者的行為，不是我的分類。
+ *
+ * 讀取放在 effect 裡而不是 useState 的初始值：伺服器端沒有 localStorage，
+ * 初次渲染兩邊必須一致，否則 hydration 會不匹配。
  */
 
 export interface Layer {
@@ -48,10 +54,31 @@ export function ChartBoard({
     trades: true, bands: false, levels: false, gap: false, kd: false,
   })
 
+  // 伺服器端沒有 localStorage，所以初次渲染一定要用預設值，讀取放到 effect。
+  // 寫在 useState 的初始值裡會讓 server 與 client 的第一次渲染對不上。
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LAYERS_KEY)
+      if (!raw) return
+      const saved = JSON.parse(raw) as Partial<Record<Layer['key'], boolean>>
+      setOn((p) => ({ ...p, ...saved }))
+    } catch {
+      // 壞掉的值就當作沒存過，不要因為它讓整張圖掛掉
+    }
+  }, [])
+
+  const persist = (next: Record<Layer['key'], boolean>) => {
+    try { localStorage.setItem(LAYERS_KEY, JSON.stringify(next)) } catch { /* 無痕模式 */ }
+  }
+
   const available = LAYERS.filter((l) =>
     hasAccount || (l.key !== 'trades' && l.key !== 'gap'))
 
-  const toggle = (k: Layer['key']) => setOn((p) => ({ ...p, [k]: !p[k] }))
+  const toggle = (k: Layer['key']) => setOn((p) => {
+    const next = { ...p, [k]: !p[k] }
+    persist(next)
+    return next
+  })
 
   const shownLevels = on.levels ? levels : { sell: null, stop: null, add: null }
   const shownMarks = on.trades ? marks : []
