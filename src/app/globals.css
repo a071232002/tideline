@@ -638,26 +638,9 @@ a { color: inherit; }
 }
 .topbarright { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
-/* 配色切換：三段，「系統」也是一個真的選項 */
-.themetoggle {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--bg);
-}
-/* 觸控目標：WCAG 2.2 SC 2.5.8 的下限是 24×24，Apple HIG 與 Material 是 44/48。
-   原本量到 38×26——桌機滑鼠按得到，手機拇指按不準（實測 e2e/audit.spec.ts）。
-   高度撐到 44，視覺上只是按鈕變高一點，密度沒有變差。 */
-.themebtn {
-  appearance: none; font: inherit; font-size: var(--t-label); cursor: pointer;
-  border: 0; background: transparent; color: var(--ink2);
-  padding: 5px 11px; min-height: 44px; min-width: 44px;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.themebtn + .themebtn { border-left: 1px solid var(--line); }
-.themebtn.on { background: var(--card); color: var(--ink); font-weight: 700; }
-.themebtn:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+/* 配色切換：一顆按鈕循環三種狀態。
+   三顆並排的話，其中兩顆在任何時刻都是「我現在不是這個」，
+   而讀者需要的資訊只有一個：現在是哪一個。 */
 
 /* 清單表頭：價位標籤放這裡，列裡就不必每列重複三次 */
 .listhead {
@@ -676,7 +659,6 @@ a { color: inherit; }
 
 /* ------------------------------------------------------------- 圖示按鈕 */
 .icon { display: block; flex: 0 0 auto; width: 18px; height: 18px; }
-.themebtn .icon { width: 16px; height: 16px; }
 
 /* 只有圖示：一定要有 aria-label，滑過要有 title */
 .iconbtn {
@@ -713,7 +695,7 @@ a { color: inherit; }
 .backlink:hover { color: var(--ink); }
 
 /* 所有按鈕都不換行——中文按鈕一旦換行就會變成直式的方塊 */
-.btn, .segbtn, .filtertag, .sorttag, .themebtn, .addtoggle {
+.btn, .segbtn, .filtertag, .sorttag, .addtoggle {
   white-space: nowrap;
 }
 
@@ -864,13 +846,14 @@ a { color: inherit; }
 }
 
 @media (max-width: 480px) {
-  /* 三欄在 375px 會把 +41.66% 擠到換行。改成兩欄，超額獨佔一列——
-     它本來就是結論，佔一整列反而更清楚 */
-  .simscores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .simscores .simscore:last-child {
-    grid-column: 1 / -1; border-left: 0; padding-left: 0;
-    border-top: 1px solid var(--line); padding-top: 8px;
-  }
+  /* 原本改成兩欄、讓「差距」獨佔一列，理由是它才是結論。
+     但那讓這一區從 60px 長到 123px——一個結論值得強調，不值得整整一列。
+     375px 除以三還有 125px，數字降一級（n-sm）就放得下，
+     差距維持 n-md：份量用字級表示，不用面積。 */
+  .simscores { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .simscore .num { font-size: var(--n-sm); }
+  .simscores .simscore:last-child { padding-left: 8px; }
+  .simscores .simscore:last-child .num { font-size: var(--n-md); }
 }
 
 /* 圖表的兩種 viewBox 寬度（Charts.tsx 的 W_WIDE / W_NARROW）。
@@ -1146,7 +1129,7 @@ main > .secttl:first-of-type { margin-top: 16px; }
 /* 只在窄螢幕顯示。`.wide-only` 的另一半——先前只有「寬才顯示」，
    現在也需要「窄才顯示」。 */
 .narrow-only { display: none; }
-@media (max-width: 560px) { .narrow-only { display: block; } }
+@media (max-width: 560px) { .narrow-only { display: revert; } }
 
 /* 手機上把三段「為什麼」收成一個摺疊區。理由要留著（是使用者要求的），
    但攤開時佔 144px，而決策條已經吃掉第一屏的 65%。 */
@@ -1170,5 +1153,28 @@ main > .secttl:first-of-type { margin-top: 16px; }
 .searchwrap { flex: 1 1 150px; min-width: 0; max-width: 240px; }
 .searchinput { width: 100%; font-size: var(--t-label); }
 @media (max-width: 560px) {
-  .searchwrap { flex: 1 1 100%; max-width: none; order: 3; }
+  /* 搜尋跟市場頁籤同一行。獨佔一行的話，篩選列會變成三排 156px，
+     而三排全部是「縮小範圍」的控制項——它們是同一類動作，該擠在一起。 */
+  .searchwrap { flex: 1 1 110px; max-width: none; order: 2; }
+  .listbar .filters { order: 1; }
+  .listbar .sortbar { order: 3; flex: 1 1 100%; }
+  .listbar { gap: 8px; }
+}
+
+/* 手機頂欄：品牌與按鈕同一行，資料狀態自己一行。
+   原本按鈕被兩句完整的資料狀態擠到第四行，整條 171px（桌機 53px）。 */
+@media (max-width: 560px) {
+  .topbar { gap: 8px 10px; }
+  .topbar .brand { order: 1; }
+  .topbarright { order: 2; margin-left: auto; }
+  .freshgroup { order: 3; flex: 1 1 100%; gap: 6px; }
+  .narrow-only { display: inline; }
+}
+
+/* 手機上收盤價與漲跌幅同一行。
+   分成兩行是為了讓四位數的高價股（2330 約 2,410）不把百分比擠掉，
+   但那是**桌機**欄寬的問題；手機是整列寬，放得下。 */
+@media (max-width: 720px) {
+  .row .rprice { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .row .rchgline { display: flex; align-items: baseline; gap: 8px; }
 }

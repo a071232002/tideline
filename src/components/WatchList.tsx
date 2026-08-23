@@ -96,8 +96,10 @@ export function WatchList({
     const days = withSim.map((r) => r.sim!.days)
     const uniformStart = starts.length > 0 && starts.every((d) => d === starts[0])
     const uniformDays = days.length > 0 && days.every((d) => d === days[0])
+    // 全部都還沒投入時，「未投入」印四遍是廢話——同一條規則
+    const allFlat = withSim.length > 0 && withSim.every((r) => r.sim!.cost === 0)
     return {
-      n: withSim.length, aiLed,
+      n: withSim.length, aiLed, allFlat,
       commonStart: uniformStart ? starts[0]! : null,
       commonDays: uniformDays ? days[0]! : null,
     }
@@ -162,12 +164,14 @@ export function WatchList({
             </span>
           </div>
           <span className="fine">
-            {summary.n} 檔在模擬
-            {summary.aiLed > 0 ? `・${summary.aiLed} 檔由 AI 判斷` : '・AI 尚未開始'}
-            {/* 全部一樣的起算日與天數只講一次，列裡就不必重複四遍 */}
-            {summary.commonStart && `・都自 ${summary.commonStart.slice(5)} 起`}
-            {summary.commonDays !== null && `追蹤 ${summary.commonDays} 天`}
-            {summary.commonDays !== null && summary.commonDays < 10 && '（還看不出結果）'}
+            {/* 「N 檔在模擬・N 檔由 AI 判斷」拿掉了：下面每一列都有 AI 徽章，
+                檔數用數的就知道。這裡只留**別的地方都沒講**的東西——
+                全部一樣的起算日與追蹤天數。 */}
+            {summary.commonStart && summary.commonDays !== null
+              ? `都自 ${summary.commonStart.slice(5)} 起追蹤 ${summary.commonDays} 天`
+                + (summary.commonDays < 10 ? '，還看不出結果' : '')
+              : `${summary.n} 檔在模擬`}
+            {summary.allFlat && '・都還沒進場'}
           </span>
         </div>
       )}
@@ -277,10 +281,13 @@ export function WatchList({
                         : <span className="rsimsub">AI 尚未判斷</span>}
                     </div>
 
-                    {/* 投入多少錢比報酬率更早該回答——0% 可能是空手，也可能是真的沒賺 */}
-                    <div className="rsimsub tnum">
-                      {r.sim.cost > 0 ? `投入 ${money0(r.sim.cost)}` : '未投入'}
-                    </div>
+                    {/* 投入多少錢比報酬率更早該回答——0% 可能是空手，也可能是真的沒賺。
+                        但全部都沒投入時只在頁首講一次。 */}
+                    {(r.sim.cost > 0 || !summary.allFlat) && (
+                      <div className="rsimsub tnum">
+                        {r.sim.cost > 0 ? `投入 ${money0(r.sim.cost)}` : '未投入'}
+                      </div>
+                    )}
 
                     {/* 追蹤天數太少時，報酬率是雜訊不是結果，不要讓它當主角。
                         **但只在跟其他檔不同步時才印**——每列都一樣的話，
