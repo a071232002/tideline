@@ -132,6 +132,16 @@ export async function fetchYahooDailyBars(symbol: string, range = '1y'): Promise
 }
 
 /** 代號驗證：加入觀察清單時當場打一次，回不到資料就擋下（PLAN §9）。 */
+/**
+ * `2330` → `2330.TW`；美股就是代號本身。
+ *
+ * 原本是 `actions.ts` 裡的私有函式。推薦那條線也要驗代號，而抄第二份的
+ * 當下就注定會有一天兩邊講的不一樣——同一個規則只能有一個地方寫。
+ */
+export function yahooSymbolFor(market: 'TW' | 'US', code: string): string {
+  return market === 'TW' ? `${code}.TW` : code
+}
+
 export async function validateSymbol(symbol: string): Promise<
   { ok: true; name: string | null; currency: string; exchange: string } | { ok: false; reason: string }
 > {

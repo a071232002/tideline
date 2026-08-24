@@ -1,13 +1,16 @@
-import { getWatchlist, getFreshness } from '@/lib/data'
+import { getWatchlist, getFreshness, getRecommendations } from '@/lib/data'
 import { AddSymbolForm } from '@/components/AddSymbolForm'
 import { WatchList } from '@/components/WatchList'
 import { TopBar } from '@/components/TopBar'
-import { removeSymbol } from './actions'
+import { Discover } from '@/components/Discover'
+import { removeSymbol, addFromDiscover } from './actions'
 
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const [rows, fresh] = await Promise.all([getWatchlist(), getFreshness()])
+  const [rows, fresh, picks] = await Promise.all([
+    getWatchlist(), getFreshness(), getRecommendations(),
+  ])
 
   return (
     <main className="wrap">
@@ -21,6 +24,10 @@ export default async function HomePage() {
 
       <AddSymbolForm />
       <WatchList rows={rows} removeAction={removeSymbol} />
+
+      {/* 放在清單下面：清單是每天要看的，這一區是偶爾逛的。
+          第一屏花了五輪從 1482px 壓到 1307px，不該為了新功能又推回去。 */}
+      <Discover items={picks} addAction={addFromDiscover} />
 
       {/* 免責聲明留著（PLAN §9），但放頁尾當細字，不跟標題搶位置。
           真正該顯眼的那份在個股頁的判斷卡裡。 */}

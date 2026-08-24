@@ -131,5 +131,23 @@ if ($code -eq 0) {
   }
 }
 
+# 5. 每天問一次「全世界有什麼值得看一眼」（發現層）。
+#
+# 跟 AI 決策一樣：**失敗不影響上面**。它掛掉頁面照常，只是那一區停在昨天，
+# 而畫面上印著日期，看得出來新不新。
+#
+# 排在最後是因為它最慢（要上網搜尋，再對每一檔候選抓一次完整歷史算指標），
+# 而且它是唯一「今天沒有也無所謂」的一段。
+if ($code -eq 0) {
+  Write-Log '--- 開始挑選值得看一眼的標的 ---'
+  try {
+    $rec = & npm run recommend 2>&1
+    $rec | ForEach-Object { Write-Log $_ }
+    if ($LASTEXITCODE -ne 0) { Write-Log "推薦 exit $LASTEXITCODE（不影響抓取結果）" }
+  } catch {
+    Write-Log "推薦失敗：$_（不影響抓取結果）"
+  }
+}
+
 if ($code -eq 0) { Write-Log '--- 完成 ---' } else { Write-Log "--- 失敗（exit $code）---" }
 exit $code

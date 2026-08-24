@@ -32,6 +32,9 @@
   --faint: var(--muted);
   --line: #d8d3c6;
   --blue: #1f6fd0;
+  /* 連結專用的深藍。--blue 對紙色底只有 4.05:1，而連結文字通常是 12～14px，
+     那個級距的門檻是 4.5。圖上的線與圖示照樣用 --blue（非文字元素門檻 3:1）。 */
+  --link: #1a5fb4;   /* 5.14:1 */
   --orange: #d9591f;
   /* 布林中軌用獨立色。原本跟 --stop 同為橘色，兩條線疊在圖上分不出來——
      一條是指標（現在在哪），一條是動作價位（跌破要反應），意義完全不同。 */
@@ -42,7 +45,9 @@
      線條與圖上的用途不受影響，那些是非文字元素，門檻是 3:1。 */
   --sell-ink: #a82929;   /* 4.99:1 on tinted bg，留一點餘裕 */
   --stop-ink: #9a490f;   /* 4.58:1 */
-  --buy-ink:  #17683a;   /* 4.85:1 */
+  /* 實測 4.47:1（量的是**合成後**的底色，不是手算的那個）——差 0.03 不合格。
+     壓深一階；這個色票只用在文字上，圖上的線走 --buy，不受影響。 */
+  --buy-ink:  #125a31;   /* 5.4:1 */
   /* 原本 #cf6316 對紙色底只有 3.66:1，而「止跌」那個標籤是 13px——
      不到大字的門檻，要 4.5:1。壓深一階到 5.0:1，圖上的線幾乎看不出差別。 */
   --stop: #ad5211;   /* 5.00:1 */
@@ -74,6 +79,7 @@
     --faint: var(--muted);
     --line: #37352c;
     --blue: #5b9df0;
+    --link: #7fb4f5;
     --orange: #e57a45;
     --mid: #a98ce0;
     --sell: #ef7676;
@@ -104,6 +110,7 @@
   --faint: var(--muted);
   --line: #37352c;
   --blue: #5b9df0;
+  --link: #7fb4f5;
   --orange: #e57a45;
   --mid: #a98ce0;
   --sell: #ef7676;
@@ -974,6 +981,54 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   flex: 1 1 100%; font-size: var(--t-micro); color: var(--ink2);
   line-height: var(--lh-normal);
 }
+/* ------------------------------------------------ 值得看一眼（發現層）
+ *
+ * 刻意跟清單長得**不一樣**：清單是每天掃的資料密集區，這裡是文字為主的
+ * 閱讀區。用同一套卡片外觀會讓兩種保證看起來像同一種——那正是這一區
+ * 最需要避免的誤讀。
+ */
+.discover { margin: 26px 0 0; border-top: 1px solid var(--line); padding-top: 16px; }
+.dischead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dischead h2 { font-size: var(--t-lead); font-weight: 800; margin: 0; }
+.dischead .fine { border: 0; padding: 0; margin: 0; }
+
+.discgroup { margin-top: 12px; }
+.disclab {
+  font-size: var(--t-label); letter-spacing: .05em; color: var(--muted);
+  font-weight: 700;
+}
+.disclist { list-style: none; margin: 4px 0 0; padding: 0; }
+.disclist li { padding: 8px 0; border-top: 1px solid var(--line); }
+.dischd { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.disccode { font-size: var(--n-sm); font-weight: 800; }
+.discname { font-size: var(--t-body); color: var(--ink2); }
+.discmine { font-size: var(--t-micro); color: var(--muted); margin-left: auto; }
+.discadd { margin-left: auto; }
+.discfacts {
+  display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 3px;
+  font-size: var(--t-micro); color: var(--ink2); font-weight: 600;
+}
+/* 題材夾成兩行。它是「為什麼被發現」，不是主角——主角是上面那行數字。
+   完整內容在出處那個連結後面。 */
+.disctheme {
+  font-size: var(--t-micro); color: var(--muted);
+  line-height: var(--lh-normal); margin: 3px 0 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* 出處是這一區唯一的保證，不能做成看不見的小字 */
+/* 出處貼在題材末尾。行內連結不必撐到 44px——SC 2.5.8 對**行內文字連結**
+   有例外，而且撐開會把兩行的題材變成一塊 88px 的空白。 */
+.discsrc { color: var(--link); text-decoration: underline; white-space: nowrap; }
+/* 連結型按鈕：加入追蹤是一個動作，但不該搶過清單裡的主要按鈕 */
+.linkbtn {
+  appearance: none; font: inherit; font-size: var(--t-micro); cursor: pointer;
+  background: 0 0; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--ink2); padding: 0 10px; min-height: 44px;
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.linkbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
 /* 樣本太短時三個數字降一級。24px 粗體的「差距 −0.29%」配三個交易日，
    字級本身就在宣稱一個資料撐不住的結論。 */
 .simscores.short .num { font-size: var(--n-sm); }

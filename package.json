@@ -21,6 +21,7 @@
     "sim": "tsx scripts/sim-backfill.ts",
     "ai": "tsx scripts/ai-decide.ts",
     "check:data": "tsx scripts/check-data.ts",
+    "recommend": "tsx scripts/recommend.ts",
     "experiment": "tsx scripts/experiment.ts"
   },
   "devDependencies": {

@@ -433,6 +433,74 @@ export interface SimTrack {
   }
 }
 
+export interface Recommendation {
+  market: 'TW' | 'US'
+  code: string
+  name: string | null
+  theme: string
+  source: string
+  rank: number
+  /** 這一批是哪一天問出來的。不一定是今天——週末不會有新的 */
+  d: string
+  /**
+   * **當天我們自己算出來的**指標。跟 `theme` 裡那些來自新聞的數字不同：
+   * 這些走的是跟清單、個股頁完全一樣的計算，那些沒有。
+   */
+  facts: {
+    close: number; k: number; pctB: number; ma60: number | null
+    add: { lo: number; hi: number }; stop: number | null; asOf: string
+  } | null
+  /** 已經在追蹤了。追蹤中的仍然顯示，但不給「加入」按鈕 */
+  tracked: boolean
+}
+
+/**
+ * AI 從全球資訊挑出來的觀察標的（最新一批）。
+ *
+ * **跟這個站其他的數字是兩種不同的東西。** 清單與個股頁的每個價位都是
+ * 我們自己從 K 棒算出來的；這一區是模型上網查到的題材，我們驗的是
+ * 「代號真的存在」與「敘述帶著來源網址」，**沒有驗那些數字**。
+ * 畫面上必須講清楚，否則兩種保證會被讀成同一種。
+ *
+ * 取最新的那一天，不是取今天：週末與假日不會有新的，而昨天的題材
+ * 今天還是有參考價值。日期照樣顯示出來，讓人自己判斷新不新。
+ */
+export async function getRecommendations(): Promise<Recommendation[]> {
+  const supabase = await createClient()
+
+  const { data: latest } = await supabase
+    .from('recommendations').select('d')
+    .order('d', { ascending: false }).limit(1).maybeSingle()
+  if (!latest) return []
+
+  const { data: rows } = await supabase
+    .from('recommendations')
+    .select('market, code, name, theme, source, rank, d, facts')
+    .eq('d', latest.d as string)
+    .order('market').order('rank')
+  if (!rows || rows.length === 0) return []
+
+  // 已經在追蹤的不給「加入」按鈕。走使用者身分，所以是**這個人**的清單
+  const { data: watched } = await supabase.from('watchlist').select('symbol_id')
+  const ids = (watched ?? []).map((w) => w.symbol_id as string)
+  const { data: syms } = ids.length > 0
+    ? await supabase.from('symbols').select('market, code').in('id', ids)
+    : { data: [] as { market: string; code: string }[] }
+  const mine = new Set((syms ?? []).map((s) => `${s.market}:${s.code}`))
+
+  return rows.map((r) => ({
+    market: r.market as 'TW' | 'US',
+    code: r.code as string,
+    name: (r.name as string) ?? null,
+    theme: r.theme as string,
+    source: r.source as string,
+    rank: Number(r.rank),
+    d: r.d as string,
+    facts: (r.facts as Recommendation['facts']) ?? null,
+    tracked: mine.has(`${r.market}:${r.code}`),
+  }))
+}
+
 export async function getSim(symbolId: string): Promise<SimTrack[]> {
   const supabase = await createClient()
 

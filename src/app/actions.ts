@@ -2,15 +2,10 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { validateSymbol } from '@/lib/sources/yahoo'
+import { validateSymbol, yahooSymbolFor } from '@/lib/sources/yahoo'
 import { ingestSymbol, type SymbolRow } from '@/lib/pipeline'
 import { invalidateAnalysis } from '@/lib/data'
 import { rebuildAll } from '@/lib/sim/run'
-
-/** `2330` → `2330.TW`；美股就是代號本身 */
-function yahooSymbolFor(market: 'TW' | 'US', code: string): string {
-  return market === 'TW' ? `${code}.TW` : code
-}
 
 /**
  * 加入觀察清單。
@@ -92,6 +87,21 @@ export async function addSymbol(_prev: unknown, formData: FormData) {
     return { error: `已加入清單，但抓取資料失敗：${result.error}` }
   }
   return { ok: `已加入 ${raw}` }
+}
+
+/**
+ * 從「值得看一眼」直接加入追蹤。
+ *
+ * 跟 `addSymbol` 是同一件事，差別只在**形狀**：那支是 `useActionState`
+ * 用的 `(prev, formData)`，要回傳錯誤字串給表單顯示；這裡是一列一個小表單，
+ * 沒有地方放錯誤訊息，成功與否直接反映在清單上（加進去了就會出現）。
+ *
+ * 代號是我們自己寫進 hidden input 的、而且寫進資料庫之前已經驗過一次，
+ * 所以這裡不需要再解釋失敗原因——真的失敗就是抓取出問題，那會顯示在
+ * 頂欄的資料狀態上。
+ */
+export async function addFromDiscover(formData: FormData) {
+  await addSymbol(null, formData)
 }
 
 export async function removeSymbol(formData: FormData) {
