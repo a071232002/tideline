@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runIngest } from '@/lib/pipeline'
+import { invalidateAnalysis } from '@/lib/data'
 
 /**
  * 每日抓取的 HTTP 入口，給 Vercel Cron 用。
@@ -45,6 +46,19 @@ export async function GET(req: Request) {
   const started = Date.now()
   try {
     const results = await runIngest('cron')
+
+    /**
+     * **抓完要清快取，而且只有在這裡清得掉。**
+     *
+     * `getStockPage` 走 `unstable_cache`（tag `analysis`、TTL 一小時）。
+     * `revalidateTag` 只在 Next 的行程裡有意義——本機版的 `scripts/ingest.ts`
+     * 是另一個 Node 行程，它呼叫也沒用，所以本機的頁面最多慢一小時才更新。
+     *
+     * 部署之後抓取跑在這個 route handler 裡，也就是**跟網站同一個行程**，
+     * 於是這一行才真的有效。少了它，排程準時跑完、資料庫也更新了，
+     * 使用者仍然要等一小時——而畫面上完全看不出來在等什麼。
+     */
+    invalidateAnalysis()
     const failed = results.filter((r) => !r.ok)
     const seconds = Math.round((Date.now() - started) / 100) / 10
     return NextResponse.json({

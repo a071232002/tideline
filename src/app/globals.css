@@ -881,6 +881,9 @@ a { color: inherit; }
      375px 除以三還有 125px，數字降一級（n-sm）就放得下，
      差距維持 n-md：份量用字級表示，不用面積。 */
   .simscores { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  /* 兩格的時候不要沿用三格的窄字級——它們有整整一半的寬度可以用 */
+  .simscores.two { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .simscores.two .num { font-size: var(--n-md); }
   .simscore .num { font-size: var(--n-sm); }
   .simscores .simscore:last-child { padding-left: 8px; }
   .simscores .simscore:last-child .num { font-size: var(--n-md); }
@@ -1028,6 +1031,33 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
 }
 .linkbtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.simscores.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* 技術面依據的原始數值。兩欄密排的定義列表——它們的意義上面的判斷句
+   已經解釋過，這裡只負責「確切是多少」。做成四張卡的話，光是卡片的
+   邊框與內距就要 307px（實測），而內容只有六個數字。 */
+.techraw {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 18px; margin: 12px 0 0;
+  border-top: 1px solid var(--line); padding-top: 10px;
+}
+.techraw > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.techraw dt {
+  font-size: var(--t-label); color: var(--muted); letter-spacing: .03em;
+  white-space: nowrap; flex: none;
+}
+/* **不要在這裡寫 color。** `.techraw dd` 的特異性(0,1,1)會蓋過
+   `.chg-down`(0,1,0)，收盤價就變成一片黑、漲跌看不出來——跟 `.tile .val`
+   當年踩的是同一個坑，那邊的註解也寫著同一句話。用 :where() 把特異性歸零。 */
+:where(.techraw dd) { color: var(--ink); }
+.techraw dd { margin: 0; font-size: var(--t-micro); min-width: 0; }
+.techchg { font-weight: 600; }
+@media (max-width: 560px) {
+  /* 手機一欄。兩欄的話「%b 0.58 95.33－102.68－110.03 帶寬 14.3%」會被
+     擠成三行，反而比一欄還高 */
+  .techraw { grid-template-columns: 1fr; }
+}
 
 /* 樣本太短時三個數字降一級。24px 粗體的「差距 −0.29%」配三個交易日，
    字級本身就在宣稱一個資料撐不住的結論。 */

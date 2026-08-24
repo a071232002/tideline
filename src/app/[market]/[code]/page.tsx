@@ -181,46 +181,48 @@ export default async function StockPage({
 
       <h2 className="secttl" data-testid="sect-why">技術面依據</h2>
 
-      <section className="tiles">
-        <div className="tile">
-          <div className="lab">收盤價</div>
-          {/* 台股紅漲綠跌——與參考範本相反，那份用的是美式配色 */}
-          <div className={`val tnum ${down ? 'chg-down' : 'chg-up'}`}
-            data-testid="close" data-dir={down ? 'down' : 'up'}>{fmt(close)}</div>
-          <div className="det tnum">
-            {down ? '▼' : '▲'}{fmt(Math.abs(chg ?? 0))}（{chgPct === null ? '—' : `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`}）
-            　開 {fmt(n(a.o))}｜高 {fmt(n(a.h))}｜低 {fmt(n(a.l))}
-          </div>
-        </div>
+      {/* **一塊，不是兩塊。**
+          原本是四格摘要（307px）＋判斷句卡（217px），而那兩塊把同一組數字
+          印了兩次：K 36.9、D 51.1、%b 0.58、中軌 102.68、季線 104.31
+          全部出現兩遍。四格給的是數字，判斷句給的是「往哪邊動」——
+          那是同一件事的兩半，本來就該在一起。
 
-        <div className="tile">
-          <div className="lab">KD（9,3,3）</div>
-          <div className="val tnum" data-testid="kd">K {fmt(kv, 1)} / D {fmt(dv, 1)}</div>
-          <div className="det">{kv !== null && dv !== null && kv < dv ? 'K 在 D 之下' : ''}</div>
-        </div>
-
-        <div className="tile">
-          <div className="lab">布林通道（20,2σ）</div>
-          <div className="val tnum">%b {fmt(pctB)}</div>
-          <div className="det tnum">
-            上軌 {fmt(up)}｜中軌 {fmt(mid)}｜下軌 {fmt(loB)}，帶寬 {bw === null ? '—' : `${(bw * 100).toFixed(1)}%`}
-          </div>
-        </div>
-
-        <div className="tile">
-          <div className="lab">技術合理價區</div>
-          <div className="val tnum">
-            {levels.fair ? `${levels.fair.lo.toFixed(2)}～${levels.fair.hi.toFixed(2)}` : '—'}
-          </div>
-          <div className="det tnum">布林中軌 {fmt(mid)} ～ 季線（60MA） {fmt(ma60)}</div>
-        </div>
-      </section>
-
-      <section className="card">
+          合併之後每個數字只出現一次，順序是：先說結論，再說怎麼看出來的，
+          最後才是原始數值。 */}
+      <section className="card tech">
         <p className="headline" data-testid="headline">{verdict.headline ?? '—'}</p>
         <ul className="clist">
           {(verdict.reasons ?? []).map((r) => <li key={r}>{r}</li>)}
         </ul>
+
+        {/* 原始數值。判斷句裡已經解釋過它們的意義，這裡只負責「確切是多少」，
+            所以壓成兩行密排的小字，不再做成四張卡。 */}
+        <dl className="techraw tnum">
+          <div>
+            <dt>收盤</dt>
+            <dd>
+              {/* 價格與漲跌分開兩個元素：`close` 這個 testid 一直以來只包價格，
+                  把漲跌塞進同一個元素會讓「顏色對不對」與「格式對不對」
+                  兩個測試同時看錯東西。 */}
+              <span className={down ? 'chg-down' : 'chg-up'} data-testid="close"
+                data-dir={down ? 'down' : 'up'}>{fmt(close)}</span>
+              <span className={`techchg ${down ? 'chg-down' : 'chg-up'}`}>
+                　{down ? '▼' : '▲'}{fmt(Math.abs(chg ?? 0))}
+                （{chgPct === null ? '—' : `${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%`}）
+              </span>
+            </dd>
+          </div>
+          <div><dt>開高低</dt><dd>{fmt(n(a.o))}／{fmt(n(a.h))}／{fmt(n(a.l))}</dd></div>
+          <div><dt>KD（9,3,3）</dt>
+            <dd data-testid="kd">K {fmt(kv, 1)}／D {fmt(dv, 1)}</dd></div>
+          <div><dt>布林（20,2σ）</dt>
+            <dd>%b {fmt(pctB)}　{fmt(loB)}－{fmt(mid)}－{fmt(up)}
+              　帶寬 {bw === null ? '—' : `${(bw * 100).toFixed(1)}%`}</dd></div>
+          <div><dt>季線 60MA</dt><dd>{fmt(ma60)}</dd></div>
+          <div><dt>技術合理價區</dt>
+            <dd>{levels.fair ? `${levels.fair.lo.toFixed(2)}～${levels.fair.hi.toFixed(2)}` : '—'}</dd></div>
+        </dl>
+
         {/* 原本這裡有 90 個字，其中「KD 9,3,3；布林 20,2σ；60 日均線」上面
             四格摘要的標題已經寫過一次，「僅供參考、非投資建議」頁首的徽章也寫過。
             重複的字不會讓人更謹慎，只會讓真正該讀的那幾行沉下去。
