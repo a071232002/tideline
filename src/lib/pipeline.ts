@@ -1,12 +1,14 @@
 import { createAdminClient } from './supabase/admin'
 import { fetchTwseDailyBars } from './sources/twse'
 import { fetchYahooDailyBars } from './sources/yahoo'
-import { analyze } from './analyze'
+import { analyze, MIN_BARS } from './analyze'
 import { RULES_VERSION } from './backfill'
 import { checkBars, checkAnalysis, checkOrphanAnalysis, type Issue } from './sanity'
 import { fetchTwseValuation, fetchYahooValuation } from './sources/valuation'
 import { fetchUsdTwd, FX_PAIR, plausible } from './sources/fx'
 import { adjustBars, type Dividends, type Splits } from './adjust'
+import { taipeiToday } from './freshness'
+import { mergeBars, needsFullFetch } from './merge'
 import { rebuildAll } from './sim/run'
 import type { Bar } from './types'
 import type { Market } from './levels'
@@ -60,6 +62,14 @@ export async function fetchBars(
   market: Market,
   code: string,
   yahooSymbol: string,
+  /**
+   * `false` 只抓最近一個月（PLAN §7 的增量策略）。
+   *
+   * 台股完整是九次 TWSE 請求、中間各隔 1.2 秒避免限流，一檔 9 秒；
+   * 增量是一次請求。指標只需要最新那根 K 棒，其餘 DB 裡本來就有——
+   * 差別在合併（`mergeBars`）與**不刪除**，見 `ingestSymbol`。
+   */
+  full = true,
 ): Promise<FetchResult> {
   if (process.env.TIDELINE_FIXTURE === '1') {
     const { fixtureBars } = await import('./sources/fixture')
@@ -67,7 +77,7 @@ export async function fetchBars(
     return { ...f, dividends: {}, splits: {} }
   }
   if (market === 'TW') {
-    const bars = await fetchTwseDailyBars(code, 9)
+    const bars = await fetchTwseDailyBars(code, full ? 9 : 1)
     // 價格用 TWSE（權威），事件只能用 Yahoo。事件抓不到就當作沒有——
     // 少一次配息會讓帳戶少收一點現金，但擋住整檔的抓取更糟。
     let dividends: Dividends = {}
@@ -76,7 +86,7 @@ export async function fetchBars(
     // 少了它，新加入的台股在頁面上只會顯示代號（實測 2454 就是一片空白）。
     let name: string | null = null
     try {
-      const y = await fetchYahooDailyBars(yahooSymbol, '1y')
+      const y = await fetchYahooDailyBars(yahooSymbol, full ? '1y' : '1mo')
       dividends = y.dividends
       splits = y.splits
       name = y.name
@@ -85,7 +95,7 @@ export async function fetchBars(
     }
     return { bars, name, currency: 'TWD', dividends, splits }
   }
-  const r = await fetchYahooDailyBars(yahooSymbol, '1y')
+  const r = await fetchYahooDailyBars(yahooSymbol, full ? '1y' : '1mo')
   return {
     bars: r.bars, name: r.name, currency: r.currency,
     dividends: r.dividends, splits: r.splits,
@@ -119,7 +129,38 @@ async function fixtureWouldClobber(symbolId: string): Promise<boolean> {
   return (data ?? []).length > 0
 }
 
-export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
+/**
+ * 讀出這一檔目前存著的 K 棒，給增量模式合併用。
+ *
+ * 不必分頁：`daily_bars` 是全站唯一有保留上限的表（`KEEP_BARS` = 185）。
+ *
+ * 但**增量模式不修剪**（修剪只在完整抓取時發生），所以兩次每月校正之間
+ * 這個數字會慢慢超過 185——一個月大約多 22 根。那是預期的，不是壞掉：
+ * 頁面只畫 `CHART_BARS` 根、指標只看最後幾根，而下一次校正會把它修回去。
+ * 離 PostgREST 的 1000 列上限還很遠。
+ */
+async function readBars(symbolId: string): Promise<Bar[]> {
+  const db = createAdminClient()
+  const { data } = await db.from('daily_bars')
+    .select('d, o, h, l, c, v').eq('symbol_id', symbolId)
+    .order('d', { ascending: true })
+  return (data ?? []).map((b) => ({
+    date: b.d as string,
+    o: Number(b.o), h: Number(b.h), l: Number(b.l), c: Number(b.c), v: Number(b.v ?? 0),
+  }))
+}
+
+export async function ingestSymbol(
+  sym: SymbolRow,
+  /**
+   * 完整抓取（九個月）還是增量（一個月）。
+   *
+   * 預設**完整**：新加入標的、手動重跑、每月校正都該拿到完整的一段。
+   * 只有每日排程會傳 `false`——那是唯一「已經有歷史、只要接上最新幾根」
+   * 的情境，也是唯一需要省那 9 秒的地方。
+   */
+  full = true,
+): Promise<IngestResult> {
   const db = createAdminClient()
   try {
     if (await fixtureWouldClobber(sym.id)) {
@@ -131,11 +172,46 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
         }],
       }
     }
-    const { bars, name, currency, dividends, splits } =
-      await fetchBars(sym.market, sym.code, sym.yahoo_symbol)
-    if (bars.length === 0) throw new Error('來源沒有回傳任何 K 棒')
+    /**
+     * 增量模式要先知道手上有什麼——合併之後才算得出指標（布林要 20 根、
+     * KD 要 9 根、季線要 60 根），而且**保留策略只能在完整抓取時執行**。
+     *
+     * 下面那個 `delete where d < kept[0].date` 是照著「這次拿到的第一根」
+     * 刪的。增量模式下那是這個月的第一天——照著刪就是把整段歷史刪光。
+     */
+    const existing: Bar[] = full ? [] : await readBars(sym.id)
 
-    const kept = bars.slice(-KEEP_BARS)
+    let r = await fetchBars(sym.market, sym.code, sym.yahoo_symbol, full)
+    let fullRun = full
+
+    if (!fullRun) {
+      const check = needsFullFetch({
+        existingCount: existing.length,
+        /**
+         * 門檻是**指標的暖機需求**（季線 60 根），不是保留上限（185）。
+         *
+         * 一開始寫成 KEEP_BARS，結果是每一輪都退回完整抓取：台股九個月的
+         * TWSE 資料只有 175 根，永遠小於 185。增量等於沒開，實測 59.6 秒
+         * 跟改之前一樣——而且不會有任何錯誤，只是「怎麼沒變快」。
+         */
+        minBars: MIN_BARS,
+        dividendCount: Object.keys(r.dividends).length,
+        splitCount: Object.keys(r.splits).length,
+        fetchedNewest: r.bars[r.bars.length - 1]?.date ?? null,
+        existingNewest: existing[existing.length - 1]?.date ?? null,
+      })
+      if (check.full) {
+        // 退回完整抓取。一年幾次，不值得為了省一次請求去手算回溯還原價
+        r = await fetchBars(sym.market, sym.code, sym.yahoo_symbol, true)
+        fullRun = true
+      }
+    }
+
+    const { name, currency, dividends, splits } = r
+    if (r.bars.length === 0) throw new Error('來源沒有回傳任何 K 棒')
+
+    const merged = fullRun ? r.bars : mergeBars(existing, r.bars)
+    const kept = merged.slice(-KEEP_BARS)
 
     // 寫進資料庫之前先問「這批資料本身合理嗎」。
     // 之前的每個資料錯誤都是眼睛看出來的，那不是系統。
@@ -218,9 +294,13 @@ export async function ingestSymbol(sym: SymbolRow): Promise<IngestResult> {
     }
 
     // daily_bars 只留 KEEP_BARS 根；daily_analysis 一列都不刪（PLAN §11）
+    //
     // **fixture 模式不做任何刪除**——它的視窗比真實資料短，刪起來會把真的資料
     // 一起帶走（實測就是這樣弄丟 0050 的 08-20、08-21）。
-    const cleanup = process.env.TIDELINE_FIXTURE !== '1'
+    //
+    // **增量模式也不刪除**，理由一模一樣：`kept[0]` 是這個月的第一天，
+    // 照著它刪就是把整段歷史刪光。修剪交給每月校正那一輪的完整抓取。
+    const cleanup = process.env.TIDELINE_FIXTURE !== '1' && fullRun
     const cutoff = kept[0]?.date
     if (cleanup && cutoff) {
       await db.from('daily_bars').delete().eq('symbol_id', sym.id).lt('d', cutoff)
@@ -288,21 +368,34 @@ async function ingestFx(): Promise<string | null> {
 export const KEEP_JOB_RUNS_DAYS = 90
 
 /**
- * PLAN §10 步驟 22 的「每月校正」**不需要實作，因為每天就在做**。
+ * 每月校正（PLAN §10 步驟 22）：當月第一次成功的那一輪，整段重抓。
  *
- * §7 寫的增量策略（平常只抓最近 5 個交易日、每月校正一次全區間）
- * 從來沒有實作：`ingestSymbol` 每一輪都抓台股 9 個月（`fetchTwseDailyBars(code, 9)`）
- * 與美股 1 年（`fetchYahooDailyBars(sym, '1y')`）。所以來源事後修正的數值
- * 每天都會被蓋回來——校正的目的已經達成，再加一個月排程只是重複。
+ * 增量抓取只看得到最近一個月，所以**來源對更早那幾天的事後修正補不回來**
+ * ——TWSE 會回頭改除權息調整後的價格，Yahoo 會補上漏掉的分割。增量永遠
+ * 讀不到那些改動，因為它根本不會去讀那幾天。校正就是為了這個。
  *
- * 代價寫在別的地方：每檔每輪約 8 秒（九次 TWSE 請求，中間各隔 1.2 秒避免限流）。
- * 本機跑得動，搬到有執行時間上限的雲端函式就是那個上限在決定能追蹤幾檔。
- * 要解的是**那件事**，不是加校正。
+ * 它同時也是**唯一會執行保留策略的那一輪**：修剪到 185 根、刪掉比最新
+ * 還新的殘留，都只在完整抓取時發生（見 `ingestSymbol` 的 `cleanup`）。
+ *
+ * 判斷「這個月跑過了沒」問 `job_runs`，不另外開一張表——那張表本來就記著
+ * 每一輪的時間。注意 `job_runs` 只留 90 天，而這個查詢只看當月，不受影響。
  */
+async function isFirstRunThisMonth(): Promise<boolean> {
+  const db = createAdminClient()
+  const monthStart = `${taipeiToday().slice(0, 7)}-01`
+  const { count } = await db.from('job_runs')
+    .select('*', { count: 'exact', head: true })
+    .eq('ok', true).gte('started_at', monthStart)
+  return (count ?? 0) === 0
+}
 
 /** 跑一輪：所有被關注的標的。沒人關注的不抓（PLAN §7）。 */
 export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
   const db = createAdminClient()
+
+  // 當月第一輪整段重抓，其餘只接最新一個月（§7）。開頭就決定，
+  // 免得中途插進來的 job_runs 列改變了答案。
+  const monthly = await isFirstRunThisMonth()
 
   const { data: run } = await db.from('job_runs').insert({ job }).select('id').single()
   const runId = run?.id as number | undefined
@@ -318,7 +411,7 @@ export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
 
   const results: IngestResult[] = []
   for (const s of (syms ?? []) as SymbolRow[]) {
-    results.push(await ingestSymbol(s))
+    results.push(await ingestSymbol(s, monthly))
   }
 
   // 模擬帳戶：價格更新完才重建，否則今天的訊號還進不到帳戶裡（PLAN §13）。

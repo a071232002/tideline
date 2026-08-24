@@ -223,7 +223,30 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
      * 資料不足時往後退到有分析的第一天（剛加入的標的還沒有那麼多歷史）。
      */
     const trackedFrom = addedAt.get(sym.id) ?? analyses[0]!.d
-    const startedOn = trackedFrom > analyses[0]!.d ? trackedFrom : analyses[0]!.d
+    let startedOn = trackedFrom > analyses[0]!.d ? trackedFrom : analyses[0]!.d
+
+    /**
+     * **起算日不能晚於已經記下來的 AI 判斷。**
+     *
+     * 移出清單再重新加入的話，`added_at` 會是重新加入的那天，起算日就往後跳——
+     * 但 `sim_ai_log` 依 §13.1 永不刪除，之前那一段的判斷還在。結果是
+     * 一批「早於帳戶起算日」的決策：它們永遠不會被模擬到，卻會被畫面
+     * 當成最新判斷顯示出來（`check-data` 第 6 條就是在抓這個）。
+     *
+     * 兩種修法：刪掉那些決策，或把起算日拉回去。**選後者**——那些是模型
+     * 當天真的做過的判斷，是這個站唯一不能重建的東西。日期可以重算，
+     * 判斷不行。
+     */
+    const { data: aiAcc } = await db.from('sim_accounts')
+      .select('id').eq('user_id', userId).eq('symbol_id', sym.id).eq('track', 'ai')
+      .limit(1).maybeSingle()
+    if (aiAcc) {
+      const { data: firstLog } = await db.from('sim_ai_log')
+        .select('d').eq('account_id', aiAcc.id as string)
+        .order('d', { ascending: true }).limit(1).maybeSingle()
+      const first = firstLog?.d as string | undefined
+      if (first && first < startedOn) startedOn = first
+    }
     const bars: Bar[] = (barRows ?? [])
       .filter((b) => (b.d as string) >= startedOn)
       .map((b) => ({
