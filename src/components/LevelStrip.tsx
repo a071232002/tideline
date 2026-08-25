@@ -38,9 +38,20 @@ export function LevelStrip({ levels, close }: { levels: StripLevel[]; close: num
       {levels.map((l) => {
         const m = META[l.kind]
         const range = l.hi !== undefined && l.hi !== l.lo
-        // 距離現價多遠——決定「還早」還是「就在眼前」
+        /**
+         * 距離現價多遠——決定「還早」還是「就在眼前」。
+         *
+         * **量到區間比較近的那一邊**，跟頁首那顆狀態徽章同一條規則
+         * （`status.ts` 的 near-add）。
+         *
+         * 原本一律量下緣，於是 0050 的膠囊寫「接近加碼區 −1.3%」（算到
+         * 上緣 103.00），下面的加碼卡寫「↓2.3%」（算到下緣 102.00）——
+         * 同一個問題兩個答案，相隔 300px。兩個都對，但讀者會以為其中
+         * 一個是錯的。
+         */
+        const near = l.hi !== undefined && close !== null && close > l.hi ? l.hi : l.lo
         const gap = close !== null && close !== 0
-          ? ((l.lo - close) / close) * 100
+          ? ((near - close) / close) * 100
           : null
         return (
           <div key={l.kind} className="stripcell" data-testid={`strip-${l.kind}`}

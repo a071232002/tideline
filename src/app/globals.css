@@ -1060,6 +1060,28 @@ a { color: inherit; }
   .chart-narrow { display: block; }
 }
 
+/* **560px 到 900px 之間是盲區。**
+ *
+ * 這個站原本只量 375 與 1280 兩個寬度，而 CSS 的斷點有五個——中間那段
+ * 從來沒有人看過。平板與小筆電就落在那裡，實測：
+ *
+ *     640px  軸標籤 8.11px
+ *     768px  軸標籤 9.92px
+ *
+ * 兩個都遠低於這個站給中文訂的 12px 下限。原因是 SVG 裡的字級是**使用者
+ * 單位**：寬版的 viewBox 是 920，容器只有 590px 的時候縮放比是 0.64，
+ * 13 個單位畫出來就剩 8px。
+ *
+ * 換第三份 viewBox 可以解，但那會讓每一頁多帶一張 SVG——主圖已經是整頁
+ * 最大的一塊。改成在這一段把使用者單位**乘回去**：容器愈窄，字級開得愈大，
+ * 畫出來剛好維持在 13px 上下。跟窄版 `.narrowtext` 用的是同一招。 */
+@media (min-width: 561px) and (max-width: 700px) {
+  .chart-wide .tick { font-size: 21px; }   /* 比例約 .64 → 13.4px */
+}
+@media (min-width: 701px) and (max-width: 900px) {
+  .chart-wide .tick { font-size: 17px; }   /* 比例約 .78 → 13.3px */
+}
+
 /* 「明日開盤」獨立於模擬帳戶卡之外，緊接決策條。
    它是整頁唯一一句可以照做的指令，所以是唯一有色邊的一行。 */
 .simnext .simnextsrc {
@@ -1189,6 +1211,15 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   margin: 0; font-size: var(--t-body); color: var(--ink); font-weight: 700;
   white-space: nowrap;
 }
+
+/* 沒有估值可講時的一行。ETF 永遠走這條——一句「這裡沒有東西」
+   不值得一個帶邊框與陰影的容器（實測手機上 111px）。 */
+.valempty {
+  font-size: var(--t-micro); color: var(--muted);
+  line-height: var(--lh-normal); margin: 16px 0 0;
+  border-top: 1px solid var(--line); padding-top: 10px;
+}
+.valempty b { color: var(--ink2); letter-spacing: .03em; }
 
 /* 標題列：代號、名稱、動作。
    **加入追蹤靠右但不換行。** 上一版它被擠到自己一行，看起來像不屬於任何

@@ -40,15 +40,22 @@ export function ValuationCard({
   // 內容 29 個字。那正是 PLAN §3 要避開的「每個區塊都配一句文案」。
   // 標題與正文併成一行，卡片高度砍半，該說的原因一個字都沒少。
   if (items.length === 0) {
+    /**
+     * **沒有東西可講的時候不要給一張卡。**
+     *
+     * ETF 永遠走這條路（它本來就沒有單一的本益比），所以那張卡每天、
+     * 每一檔 ETF 都印同一句話，實測手機上 111px。一句「這裡沒有東西」
+     * 值不到一個帶邊框與陰影的容器——降成一行細字。
+     */
     return (
-      <section className="card cardline" data-testid="valuation-card">
-        <h2>估值</h2>
-        <p className="empty" data-testid="valuation-empty">
+      <p className="valempty" data-testid="valuation-card">
+        <b>估值</b>{' '}
+        <span data-testid="valuation-empty">
           {isEtf
             ? 'ETF 由一籃子成分股組成，沒有單一的本益比與淨值比。'
             : '目前沒有估值資料——可能是尚未抓到，或這檔標的的來源沒有提供。'}
-        </p>
-      </section>
+        </span>
+      </p>
     )
   }
 
