@@ -50,15 +50,27 @@ export function Discover({ items, addAction }: {
         {/* 不叫「今日精選」也不叫「熱門」：最熱的那幾檔常常正好被排除
             （實測 8 檔美股候選有 6 檔跌破季線）。名字要對得起篩選規則。 */}
         <h2>值得看一眼</h2>
-        <span className="fine">
-          {/* 界線就寫在這裡，而且要**精確**。
-              上一版寫「還沒有經過這個站的價位分析」——那句話在排序改成用
-              站上指標之後就變成錯的了。現在的界線在另一個地方：
-              下面那行數字是我們算的，題材那句話裡的數字不是。 */}
-          AI 從新聞找標的，<b>排序用這個站自己算的指標</b>（回檔到加碼區、%b 低、KD 低檔）。
-          題材那句話裡的數字來自新聞，未經驗證，請看出處・{asOf}
-        </span>
+        <span className="disctime tnum">{asOf}</span>
       </div>
+
+      {/* **方法論收進摺疊區。**
+          原本這四行灰字擋在第一筆推薦前面，而它是「讀一次就懂」的東西——
+          每天再讀一次不會更懂，只會讓人跳過整個區塊。
+          但它不能刪：這一區有兩種保證混在一起（下面那行數字是我們算的，
+          題材裡的數字不是），不講清楚會被讀成同一種。 */}
+      <details className="dischow">
+        <summary>怎麼挑的</summary>
+        <p>
+          AI 上網找最近受關注的標的，<b>排序用這個站自己算的指標</b>——
+          回檔到加碼區、%b 在中軌以下、KD 在低檔；跌破季線或止跌的直接排除。
+          所以最熱門的那幾檔常常不在這裡。
+        </p>
+        <p>
+          每一列的 <b>收／%b／K／加碼</b> 是我們自己從 K 棒算的，跟清單、
+          個股頁同一套計算。<b>題材那句話裡的數字來自新聞，未經驗證</b>，
+          要細節請點出處。
+        </p>
+      </details>
 
       {(['TW', 'US'] as const).map((m) => {
         const list = byMarket(m)
@@ -69,6 +81,10 @@ export function Discover({ items, addAction }: {
             <ul className="disclist">
               {list.map((r) => (
                 <li key={`${r.market}-${r.code}`} data-testid={`disc-${r.code}`}>
+                  {/* 名次要畫出來。這一區叫 TOP3 而排序是有依據的——
+                      看不到名次，三列就只是三個並列的東西。 */}
+                  <span className="discrank tnum" aria-hidden="true">{r.rank}</span>
+                  <div className="discbody">
                   <div className="dischd">
                     <span className="disccode tnum">{r.code}</span>
                     {r.name && <span className="discname">{r.name}</span>}
@@ -86,20 +102,24 @@ export function Discover({ items, addAction }: {
                   </div>
                   {/* **我們自己算的**那幾個數字。它們才是排序的依據，
                       所以排在題材之前——題材是為什麼被發現，這行是為什麼被排這裡。 */}
+                  {/* 固定四欄，**跨列對齊**。原本是 flex 換行，各列的 %b
+                      落在不同的水平位置——而 %b 正是排序的依據，
+                      對不齊就沒辦法一眼看出「哪一檔回檔得最深」。 */}
                   {r.facts && (
-                    <div className="discfacts tnum">
-                      <span>收 {n2(r.facts.close)}</span>
-                      <span>%b {r.facts.pctB.toFixed(2)}</span>
-                      <span>K {r.facts.k.toFixed(0)}</span>
-                      <span>加碼 ~{n2(r.facts.add.hi)}</span>
-                    </div>
+                    <dl className="discfacts tnum">
+                      <div><dt>收</dt><dd>{n2(r.facts.close)}</dd></div>
+                      <div><dt>%b</dt><dd>{r.facts.pctB.toFixed(2)}</dd></div>
+                      <div><dt>K</dt><dd>{r.facts.k.toFixed(0)}</dd></div>
+                      <div><dt>加碼</dt><dd>~{n2(r.facts.add.hi)}</dd></div>
+                    </dl>
                   )}
-                  <p className="disctheme">
+                  <p className="disctheme" title={r.theme}>
                     {r.theme}{' '}
                     {/* 出處貼著題材，不是另起一行——它是這半邊唯一的保證 */}
                     <a className="discsrc" href={r.source}
                       target="_blank" rel="noopener noreferrer">出處</a>
                   </p>
+                  </div>
                 </li>
               ))}
             </ul>

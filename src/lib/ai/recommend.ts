@@ -21,7 +21,17 @@
  * 抓取壞了。所以代號要先過一次來源驗證，過不了的整列丟掉。
  */
 
-export const MAX_THEME_CHARS = 120
+/**
+ * 題材的長度上限。
+ *
+ * 原本是 120 字。在 375px 的螢幕上、12px 的字，一行大約 28 個中文字——
+ * 120 字就是四行多，而版面只給兩行，於是每一條題材都在句子中間被切斷。
+ * **一句被切斷的話比沒有那句話更糟**：讀者不知道後面還有什麼，
+ * 也不知道那個逗號後面會不會是「但是」。
+ *
+ * 50 字剛好兩行，完整。要更詳細的就點出處——那是它存在的理由。
+ */
+export const MAX_THEME_CHARS = 50
 
 export interface RawPick {
   code: string
@@ -137,7 +147,8 @@ export function buildRecommendPrompt(perMarket: number, exclude: string[]): stri
 
 規則：
 - code 必須是真實可交易代號，台股四碼數字、美股英文代號
-- theme 一句話（${MAX_THEME_CHARS} 字以內），講「為什麼最近受關注」，不要給投資建議
+- theme **一句話、${MAX_THEME_CHARS} 字以內**，講「為什麼最近受關注」，不要給投資建議
+  （寫不下的細節不要硬塞，讀者要細節會點 source）
 - source 必須是你這次真的查到的網址，不能憑記憶編造
 - 查不到就給空陣列，不要用印象填`
 }
