@@ -86,9 +86,20 @@ describe('深色的對比要在區間內，不是越高越好', () => {
     expect(r, `${r.toFixed(2)}:1 太刺眼`).toBeLessThan(13)
   })
 
-  it('次要與標籤文字仍然過 4.5:1', () => {
+  it('**次要與標籤文字要比 4.5 更有餘裕**——深色底吃掉細筆畫', () => {
+    /**
+     * 4.5 是「讀得到」的門檻，不是「讀得舒服」的門檻。
+     *
+     * 實測過一次：底色抬亮之後 --ink2 是 5.88、--muted 是 4.80，兩個都「合格」，
+     * 而使用者的回報是「小字看不清楚」。原因是深色底上細的亮筆畫會被周圍的
+     * 暗色吃掉，看起來比同樣對比的暗字更細——所以深色的次要文字不能照抄
+     * 淺色的數字。
+     *
+     * 這兩條下限比 WCAG 高，是刻意的。
+     */
+    expect(ratio(d['--ink2']!, d['--card']!), '--ink2 對卡片').toBeGreaterThan(7)
+    expect(ratio(d['--muted']!, d['--card']!), '--muted 對卡片').toBeGreaterThan(5.5)
     for (const k of ['--ink2', '--muted']) {
-      expect(ratio(d[k]!, d['--card']!), `${k} 對卡片`).toBeGreaterThan(4.5)
       expect(ratio(d[k]!, d['--bg']!), `${k} 對底色`).toBeGreaterThan(4.5)
     }
   })
