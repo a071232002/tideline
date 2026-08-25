@@ -20,20 +20,41 @@ import { readFileSync } from 'node:fs'
  * 不是只有下限。
  */
 
-const css = readFileSync(new URL('../src/app/globals.css', import.meta.url), 'utf8')
+const raw = readFileSync(new URL('../src/app/globals.css', import.meta.url), 'utf8')
 
-/** 取出某個選擇器區塊裡的所有 `--token: value` */
+/**
+ * **先把註解拿掉。**
+ *
+ * 這份 CSS 的註解裡大量出現色碼與屬性名（那是刻意的，每個值都寫著為什麼
+ * 是這個值）。不剝掉的話，「有沒有處理 prefers-reduced-motion」這種檢查
+ * 會被一句解釋它的註解騙過去——測試自己先踩到了這個坑。
+ */
+const css = raw.replace(/\/\*[\s\S]*?\*\//g, '')
+
+/**
+ * 取出某個選擇器**所有**區塊裡的 `--token: value`。
+ *
+ * 不是只有第一個：`:root` 在這份檔案裡出現好幾次（色彩、字級、間距、動態
+ * 各一段，因為每一段都帶著自己的說明）。只讀第一個的話，後面幾段等於
+ * 不存在——測試自己也先踩到了這個坑。
+ */
 function tokens(selector: string): Record<string, string> {
-  const i = css.indexOf(selector)
-  expect(i, `找不到選擇器 ${selector}`).toBeGreaterThan(-1)
-  const open = css.indexOf('{', i)
-  // 這些區塊裡只有宣告，沒有巢狀規則，所以第一個 } 就是結尾
-  const close = css.indexOf('}', open)
-  const body = css.slice(open + 1, close)
   const out: Record<string, string> = {}
-  for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
-    out[m[1]!] = m[2]!.trim()
+  let from = 0
+  let found = false
+  for (;;) {
+    const i = css.indexOf(selector, from)
+    if (i < 0) break
+    found = true
+    const open = css.indexOf('{', i)
+    // 這些區塊裡只有宣告，沒有巢狀規則，所以第一個 } 就是結尾
+    const close = css.indexOf('}', open)
+    for (const m of css.slice(open + 1, close).matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+      out[m[1]!] = m[2]!.trim()
+    }
+    from = close + 1
   }
+  expect(found, `找不到選擇器 ${selector}`).toBe(true)
   return out
 }
 
@@ -70,8 +91,9 @@ describe('系統深色與手動深色必須一致', () => {
   it('淺色定義的每一個 token，深色都要有——漏掉會掉回淺色的值', () => {
     const light = tokens(':root {')
     for (const k of Object.keys(light)) {
-      // 字級與行高不隨主題變，只檢查顏色
-      if (/^--(t|n|lh)-/.test(k)) continue
+      // **只有顏色隨主題變。** 字級、行高、間距、動態在兩個模式下相同，
+      // 它們不該出現在深色區塊裡——重複定義就等於多一個會漂移的地方。
+      if (/^--(t|n|lh|sp|mo)-/.test(k)) continue
       expect(auto[k], `深色缺少 ${k}`).toBeDefined()
     }
   })
@@ -127,5 +149,57 @@ describe('淺色也要守同一組規則', () => {
 
   it('邊框看得見', () => {
     expect(ratio(l['--line']!, l['--card']!)).toBeGreaterThan(1.35)
+  })
+})
+
+/**
+ * 間距要有節奏。
+ *
+ * 原本有 19 種不同的間距值，其中 3、5、7、9、13、18、22、26 落在格子外，
+ * 共 36 處。單看每一個都合理（「這裡再擠一點點」），合起來就是整份版面
+ * 沒有節奏——那種不對齊不會被指出來，只會讓人覺得「沒做完」。
+ *
+ * 這條測試不看好不好看，只看**有沒有在格子上**。新增一個 7px 的 margin
+ * 會立刻紅，而那正是這種漂移唯一會被攔下來的時機——事後沒有人會回頭數。
+ */
+const SPACING_SCALE = [0, 1, 2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 32, 40]
+
+describe('間距只用格線上的階', () => {
+  it('margin / padding / gap 不出現格線外的數值', () => {
+    const bad: string[] = []
+    const re = /(?:^|[\s;{])((?:margin|padding|gap|row-gap|column-gap)[a-z-]*)\s*:\s*([^;}]+)/g
+    for (const m of css.matchAll(re)) {
+      for (const px of m[2]!.matchAll(/(\d+)px/g)) {
+        const v = Number(px[1])
+        if (!SPACING_SCALE.includes(v)) bad.push(`${m[1]}: …${v}px`)
+      }
+    }
+    expect([...new Set(bad)].sort(), '這些間距不在格線上').toEqual([])
+  })
+
+  it('格線本身有定義成 token，不是只存在於註解裡', () => {
+    const root = tokens(':root {')
+    // --sp-* 至少要有這幾階，否則「定義一次重複使用」只是一句話
+    for (const k of ['--sp-2', '--sp-4', '--sp-6', '--sp-8', '--sp-12']) {
+      expect(root[k], `缺少 ${k}`).toBeDefined()
+    }
+  })
+})
+
+describe('動態也要有 token，而且尊重 reduced-motion', () => {
+  it('時間與緩動各自只有一組', () => {
+    const root = tokens(':root {')
+    for (const k of ['--mo-fast', '--mo-slow', '--mo-ease']) {
+      expect(root[k], `缺少 ${k}`).toBeDefined()
+    }
+  })
+
+  it('**prefers-reduced-motion 必須把時間歸零**', () => {
+    // 這不是偏好設定：對一部分人，動態是會引發不適的醫療需求
+    const i = css.indexOf('prefers-reduced-motion')
+    expect(i, '整份 CSS 沒有處理 prefers-reduced-motion').toBeGreaterThan(-1)
+    const block = css.slice(i, css.indexOf('}', css.indexOf('{', i)) + 1)
+    expect(block).toMatch(/--mo-fast:\s*0m?s/)
+    expect(block).toMatch(/--mo-slow:\s*0m?s/)
   })
 })
