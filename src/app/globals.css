@@ -31,6 +31,27 @@
   --muted: #696457;  /* 4.82:1 on --bg */
   --faint: var(--muted);
   --line: #d8d3c6;
+  /**
+   * 深色的視覺加粗量。淺色是 0。
+   *
+   * 亮字在暗底上看起來比同樣字重的暗字**細**——那是光學現象，不是對比
+   * 不夠。標準解法是深色時把字重往上一級，但這個站的中文走微軟正黑體，
+   * 而它只有 Light / Regular / Bold 三檔：實測 `font-weight: 500` 的墨量
+   * 跟 400 **一模一樣**（99），600 才跳到 Bold（124，+25%）。
+   * 也就是說「稍微加粗」在這個字型上不存在。
+   *
+   * 描邊補上那個缺掉的檔位：0.15px 實測 +21%，介於 Regular 與 Bold 之間，
+   * 而且可以無段調整。
+   *
+   * 寫成 em 是為了讓這個值跟著根字級走，**但它不會隨各元素的字級縮放**——
+   * 描邊寬度是長度，子元素繼承的是**計算後的絕對值**（實測 .012em 在
+   * 16px 的根字級下解析成 0.192px，13px 的說明文字與 24px 的數字拿到的
+   * 是同一個 0.192px）。
+   *
+   * 那正好是想要的：13px 的字加 0.192px 相當於加粗四分之一，而 24px 的
+   * 數字只加了八分之一——小字最需要，大字本來就看得清楚。
+   */
+  --stroke-fix: 0;
   --blue: #1f6fd0;
   /* 連結專用的深藍。--blue 對紙色底只有 4.05:1，而連結文字通常是 12～14px，
      那個級距的門檻是 4.5。圖上的線與圖示照樣用 --blue（非文字元素門檻 3:1）。 */
@@ -93,6 +114,7 @@
      *   卡片對底    1.16      1.20
      *   邊框對卡    1.42      1.42
      */
+    --stroke-fix: .012em;
     --bg: #302f27;
     --card: #3d3b32;
     --ink: #f1f1ef;
@@ -144,6 +166,7 @@
    *   卡片對底    1.16      1.20
    *   邊框對卡    1.42      1.42
    */
+  --stroke-fix: .012em;
   --bg: #302f27;
   --card: #3d3b32;
   --ink: #f1f1ef;
@@ -179,9 +202,15 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
     "Microsoft JhengHei", sans-serif;
   line-height: var(--lh-normal);
+  /* antialiased 在 macOS 上會把字**變細**——淺色底可以接受，深色底上
+     是雪上加霜。深色改用系統預設（subpixel），Windows 上兩者無差別。 */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* 視覺加粗。淺色是 0，等於沒有這一行 */
+  -webkit-text-stroke: var(--stroke-fix) currentColor;
 }
+:root:not([data-theme="light"]) body { -webkit-font-smoothing: auto; }
+:root[data-theme="dark"] body { -webkit-font-smoothing: auto; }
 
 /* ------------------------------------------------------------------ 字級
  *
