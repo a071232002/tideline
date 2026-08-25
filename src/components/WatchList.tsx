@@ -8,6 +8,7 @@ import { Icon } from './Icon'
 import { levelStatus } from '@/lib/status'
 import { sortRows, type SortMode } from '@/lib/sorting'
 import { AI_ACTION } from '@/lib/sim/actions'
+import { summariseDay } from '@/lib/summary'
 import type { WatchRow } from '@/lib/data'
 
 function pct(v: number | null): string {
@@ -74,6 +75,10 @@ export function WatchList({
    * 把它們加起來得到的既不是投組報酬、也不是任何一段期間的報酬，
    * 只是一堆不同尺規的數字相加。要看整體請到回顧頁，那裡分得開。
    */
+  /** 今天一句話。用**全部**的列算，不是篩選後的——頁首講的是這一天，
+      不是「你現在看到的這幾檔」。 */
+  const day = useMemo(() => summariseDay(rows), [rows])
+
   const summary = useMemo(() => {
     const withSim = rows.filter((r) => r.sim)
     const aiLed = withSim.filter((r) => r.sim!.lead === 'ai').length
@@ -93,8 +98,20 @@ export function WatchList({
     const uniformDays = days.length > 0 && days.every((d) => d === days[0])
     // 全部都還沒投入時，「未投入」印四遍是廢話——同一條規則
     const allFlat = withSim.length > 0 && withSim.every((r) => r.sim!.cost === 0)
+
+    /**
+     * AI 的判斷全部一樣時，每一列印一次是雜訊。
+     *
+     * 實測連續幾天五檔都是「AI 觀望」——五個一模一樣的徽章，讀者要一列一列
+     * 掃過去才發現它們相同。上移到頁首講一次，跟起算日、追蹤天數同一條規則。
+     * 只要有**任何一檔不同**就全部印回來，因為那時候差異本身就是資訊。
+     */
+    const acts = withSim.map((r) => r.sim!.aiToday?.action ?? null)
+    const uniformAct = acts.length > 1 && acts.every((a) => a !== null && a === acts[0])
+
     return {
       n: withSim.length, aiLed, allFlat,
+      commonAct: uniformAct ? acts[0]! : null,
       commonStart: uniformStart ? starts[0]! : null,
       commonDays: uniformDays ? days[0]! : null,
     }
@@ -156,20 +173,27 @@ export function WatchList({
             {/* 「明天開盤」讀起來像在猜明天。單已經下了——訊號是收盤、
                 資訊到齊之後才產生的，成交排在下一個開盤只是因為那是
                 決定之後第一個真的碰得到的價格。所以講「已決定」。 */}
+            {/* **一句話講完今天。**
+                原本這裡是「收盤後已決定／沒有要動作的」——一個狀態，
+                然後底下五列平等地攤開。有動作的日子跟沒動作的日子，
+                畫面看起來幾乎一樣，而那正是這個站唯一該讓人注意的差別。
+                現在直接點名：要動作的是哪幾檔，或者沒動作時最該看哪一檔。 */}
             <span className="lab">收盤後已決定</span>
-            <span className={`simtotalpct ${todoCount > 0 ? 'chg-up' : ''}`}>
-              {todoCount > 0 ? `${todoCount} 檔要動作` : '沒有要動作的'}
+            <span className={`simtotalpct ${day.acting.length > 0 ? 'chg-up' : ''}`}
+              data-testid="day-headline">
+              {day.headline}
             </span>
           </div>
           <span className="fine">
-            {/* 「N 檔在模擬・N 檔由 AI 判斷」拿掉了：下面每一列都有 AI 徽章，
-                檔數用數的就知道。這裡只留**別的地方都沒講**的東西——
-                全部一樣的起算日與追蹤天數。 */}
+            {/* 只留**別的地方都沒講**的東西：全部一樣的起算日、追蹤天數、
+                以及全部一樣的 AI 判斷。任何一項只要有一檔不同就不在這裡講，
+                因為那時候差異本身就是資訊。 */}
             {summary.commonStart && summary.commonDays !== null
               ? `都自 ${summary.commonStart.slice(5)} 起追蹤 ${summary.commonDays} 天`
                 + (summary.commonDays < 10 ? '，還看不出結果' : '')
               : `${summary.n} 檔在模擬`}
             {summary.allFlat && '・都還沒進場'}
+            {summary.commonAct && `・AI 全部${AI_ACTION[summary.commonAct] ?? summary.commonAct}`}
           </span>
         </div>
       )}
@@ -274,12 +298,16 @@ export function WatchList({
                     )}
                     {/* AI 今天的判斷放最上面——它是這個站的主角，
                         不該只出現在點進去之後的第二層 */}
-                    <div className="rsimai" data-testid={`ai-${r.code}`}>
-                      {r.sim.aiToday
-                        ? <><span className="rsimailab">AI</span>{' '}
-                          {AI_ACTION[r.sim.aiToday.action] ?? r.sim.aiToday.action}</>
-                        : <span className="rsimsub">AI 尚未判斷</span>}
-                    </div>
+                    {/* 全部一樣時上移到頁首講一次——五個一模一樣的徽章，
+                        讀者要一列一列掃過去才發現它們相同。 */}
+                    {!summary.commonAct && (
+                      <div className="rsimai" data-testid={`ai-${r.code}`}>
+                        {r.sim.aiToday
+                          ? <><span className="rsimailab">AI</span>{' '}
+                            {AI_ACTION[r.sim.aiToday.action] ?? r.sim.aiToday.action}</>
+                          : <span className="rsimsub">AI 尚未判斷</span>}
+                      </div>
+                    )}
                     {/* AI 的判斷停在比這一列的資料日期更早的那天——排程沒跑完。
                         不講的話畫面會顯示一個看起來很正常的舊判斷（實測 2026-08-23：
                         午後那輪從來沒觸發，週五的判斷拖到週日早上才做）。 */}
