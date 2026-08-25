@@ -1212,6 +1212,50 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   white-space: nowrap;
 }
 
+/* ------------------------------------------------ 載入中與出錯
+ *
+ * 這兩種狀態原本完全沒有設計：換頁沒有任何回饋，出錯是 Next 的英文預設頁。
+ * 本機量到換頁只要 145～209ms，但那是因為 Supabase 在 localhost——
+ * 個股頁做約 16 次連續查詢，部署後每一次都是真的網路往返。
+ */
+.skel {
+  background: var(--line);
+  border-radius: 8px;
+  /* **不做閃爍動畫。** 那是裝飾，而且對前庭系統敏感的人是負擔。
+     這個站的 prefers-reduced-motion 已經把動態歸零，骨架不該自己開例外。 */
+  opacity: .55;
+}
+.skelrow {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px; margin-top: 12px;
+}
+
+/* 螢幕閱讀器聽得到、眼睛看不到。骨架屏少了它，只會唸出一堆空方塊 */
+.sronly {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+.errpage h1 {
+  font-size: var(--t-title); font-weight: 800; margin: 0 0 12px;
+  line-height: var(--lh-tight);
+}
+.errpage p {
+  font-size: var(--t-body); color: var(--ink2);
+  line-height: var(--lh-normal); margin: 0 0 16px;
+}
+.errpage code {
+  font-size: var(--t-micro); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 4px;
+}
+.errbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.errbtns .btn { text-decoration: none; }
+.errmsg {
+  font-size: var(--t-micro); color: var(--ink2); white-space: pre-wrap;
+  word-break: break-word; margin: 8px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 /* 沒有估值可講時的一行。ETF 永遠走這條——一句「這裡沒有東西」
    不值得一個帶邊框與陰影的容器（實測手機上 111px）。 */
 .valempty {

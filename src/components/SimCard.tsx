@@ -242,6 +242,13 @@ export function SimCard({ tracks, market, symbolId }: {
             <div><dt>股利稅負</dt><dd className="tnum">未計入</dd></div>
           )}
         </dl>
+        {/* 表單留在摺疊區裡（本金是設定，不是每天要讀的東西），
+            但**它的預設是展開**——見下面 `open`。
+
+            加上 `loading.tsx` 之後這一頁被包進 Suspense：改完本金、
+            server action 重新驗證，整段會重新串流，而 `<details>` 的
+            展開狀態是 DOM 狀態，重新掛載就沒了。結果是使用者按下「更新」，
+            面板收起來，成功訊息在裡面——**一個看不到的確認等於沒有確認**。 */}
         <CapitalForm symbolId={symbolId} current={lead.initialTwd} market={market} />
       </details>
 
