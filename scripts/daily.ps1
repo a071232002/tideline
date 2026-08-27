@@ -49,11 +49,19 @@ function Write-Log($msg) {
 }
 
 function Test-Supabase {
-  # 位址從環境變數來，不要寫死 127.0.0.1——雲端模式要檢查的是雲端那台
+  # 位址從環境變數來，不要寫死 127.0.0.1——雲端模式要檢查的是雲端那台。
+  #
+  # **一定要帶 apikey。** 本機的 Supabase 這支端點不需要憑證，雲端的需要，
+  # 沒帶就回 401——而 401 跟「連不上」在這裡長得一樣。實測第一次切到雲端
+  # 模式就卡在這裡：Supabase 明明活著，腳本卻說「連不上，這次跳過」。
   if (-not $env:NEXT_PUBLIC_SUPABASE_URL) { return $false }
+  $headers = @{}
+  if ($env:NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    $headers['apikey'] = $env:NEXT_PUBLIC_SUPABASE_ANON_KEY
+  }
   try {
     $r = Invoke-WebRequest -Uri ($env:NEXT_PUBLIC_SUPABASE_URL.TrimEnd('/') + '/auth/v1/health') `
-      -TimeoutSec 10 -UseBasicParsing
+      -Headers $headers -TimeoutSec 10 -UseBasicParsing
     return $r.StatusCode -eq 200
   } catch { return $false }
 }
@@ -66,7 +74,16 @@ if (-not (Test-Path $envPath)) {
   Write-Log "X 找不到 $EnvFile，這次跳過"
   exit 1
 }
-Get-Content $envPath | ForEach-Object {
+# **-Encoding UTF8 不能省。**
+#
+# PowerShell 5.1 的 Get-Content 預設用主控台字碼頁（這台機器是 cp950）讀檔。
+# .env 檔裡的中文註解是 UTF-8，用 cp950 解讀時一個中文字的位元組會「吃掉」
+# 後面的換行，於是兩行併成一行——實測 .env.cloud 有 19 行，不指定編碼只讀到
+# 14 行，而 SUPABASE_SERVICE_ROLE_KEY 剛好被併進它上面那句中文註解裡。
+#
+# 結果是 npm 子行程拿不到那把 key，AI 那步倒在「缺少 SUPABASE_SERVICE_ROLE_KEY」，
+# 而前面的 URL 與 anon key 都讀到了——看起來像 key 填錯，其實是檔案讀錯。
+Get-Content $envPath -Encoding UTF8 | ForEach-Object {
   if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
     Set-Item -Path ('env:' + $matches[1]) -Value $matches[2].Trim()
   }
