@@ -397,7 +397,30 @@ export async function runIngest(job = 'ingest'): Promise<IngestResult[]> {
   // 免得中途插進來的 job_runs 列改變了答案。
   const monthly = await isFirstRunThisMonth()
 
-  const { data: run } = await db.from('job_runs').insert({ job }).select('id').single()
+  /**
+   * **寫不進 job_runs 就整輪失敗，不要往下做。**
+   *
+   * 這一列本來只是執行紀錄，錯了也不影響數字——原本因此忽略它的錯誤。
+   * 但它同時是**第一個寫入動作**，所以它失敗代表的往往不是「日誌壞了」，
+   * 是「這個環境根本寫不進資料庫」。
+   *
+   * 實測（2026-08-27 第一次部署）：Vercel 上的 SUPABASE_SERVICE_ROLE_KEY
+   * 不是那把 secret，於是 admin client 退化成 anon，每一個寫入都被 RLS 擋掉
+   * （42501），而端點回報 **ok:true、seconds:14.3、failed:[]**——
+   * 抓取「成功」了，資料庫一列都沒進去。那正是這個站最怕的那種錯誤：
+   * 錯得很像對的。
+   */
+  const { data: run, error: runErr } = await db.from('job_runs')
+    .insert({ job }).select('id').single()
+  if (runErr) {
+    throw new Error(
+      `寫不進 job_runs：${runErr.message}`
+      + `（${runErr.code === '42501'
+        ? 'RLS 擋下——這通常代表 SUPABASE_SERVICE_ROLE_KEY 不是 service role 那一把，'
+          + '或者環境變數改過但沒有重新部署'
+        : '權限或連線問題'}）`,
+    )
+  }
   const runId = run?.id as number | undefined
 
   const fxNote = await ingestFx()
