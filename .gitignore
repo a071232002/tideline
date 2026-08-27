@@ -50,3 +50,7 @@ supabase/functions/
 # 排程產生的 log
 /logs/
 .shots/
+
+# 部署用的 SQL：02-data.sql 裡是真的觀察清單與 AI 決策，而這個 repo 是公開的。
+# 產生方式在版控裡（scripts/deploy-sql.ts），產物不進版控。
+/deploy/
