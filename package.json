@@ -21,6 +21,7 @@
     "sim": "tsx scripts/sim-backfill.ts",
     "ai": "tsx scripts/ai-decide.ts",
     "check:data": "tsx scripts/check-data.ts",
+    "check:deploy": "tsx scripts/deploy-check.ts",
     "recommend": "tsx scripts/recommend.ts",
     "deploy:sql": "tsx scripts/deploy-sql.ts",
     "experiment": "tsx scripts/experiment.ts"
