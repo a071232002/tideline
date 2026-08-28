@@ -85,10 +85,50 @@ interface AiLogRow {
  * 動作是固定選項不是自由輸入——`buy_50` 代表「用掉一半現金」，
  * 實際股數由引擎按成交價算。AI 沒有欄位可以填數字，所以沒有機會編數字（§13.5）。
  */
-export function aiDecider(logs: readonly AiLogRow[]): Decider {
+export function aiDecider(
+  logs: readonly AiLogRow[],
+  /** 底倉。給了才會在第一天先把規劃好的那一份放進場 */
+  core?: { fraction: number; initialCash: number },
+): Decider {
   const byDate = new Map(logs.filter((l) => l.status === 'ok').map((l) => [l.d, l]))
+  const coreCash = (core?.fraction ?? 0) * (core?.initialCash ?? 0)
+  /**
+   * **底倉只建一次。**
+   *
+   * 規則軌的底倉在止損冷卻結束之後會重建——那是對的，止損是調節不是離場。
+   * 但 AI 軌沒有止損，它清空部位只會是因為**它自己決定要賣**。那時候再
+   * 自動買回去，等於把主角的決定改掉，而畫面上還掛著它當初的理由。
+   */
+  let corePlaced = false
   return (ctx) => {
     const l = byDate.get(ctx.bar.date)
+
+    /**
+     * 底倉：AI 軌也要有，否則主角還是站在場外。
+     *
+     * 沒有它的話，「觀望」在空手的帳戶上等於永遠留在現金——實測到現在
+     * AI 判斷 5 天全部 hold，帳戶因此一直是 0.00%。但 AI 的提示詞講的是
+     * **加碼／減碼／觀望**，那三個詞預設你手上有東西；「觀望」該是
+     * 「維持現有部位」，不是「繼續站在場外」。
+     *
+     * AI 當天如果自己就說要買，那就聽它的，不用再幫它建一次。
+     */
+    const wantsBuy = l?.action?.startsWith('buy') === true
+    if (!corePlaced && coreCash > 0 && ctx.state.shares === 0
+      && ctx.state.cost < 1e-9 && !wantsBuy) {
+      corePlaced = true
+      return {
+        buyCash: coreCash,
+        triggers: ['core'],
+        // 這不是 AI 的判斷，是這筆錢的配置方式。標成 rule 才不會讓人
+        // 以為 AI 說了什麼——理由那一行也講得很清楚。
+        decidedBy: 'rule',
+        reason: `建立底倉 ${Math.round((core?.fraction ?? 0) * 100)}%`
+          + '——這筆錢是規劃給這一檔的，AI 的判斷從這個部位開始加減',
+      }
+    }
+    if (wantsBuy) corePlaced = true
+
     if (!l?.action || l.action === 'hold') return null
 
     const m = /^(buy|sell)_(25|50|100)$/.exec(l.action)
@@ -113,7 +153,10 @@ export function deciderFor(
   initialCash: number,
 ): Decider {
   if (track === 'hold') return holdDecider()
-  if (track === 'ai') return aiDecider(logs)
+  if (track === 'ai') {
+    return aiDecider(logs,
+      { fraction: DEFAULT_RULES.coreFraction ?? 0, initialCash })
+  }
   return ruleDecider(days, initialCash, DEFAULT_RULES)
 }
 

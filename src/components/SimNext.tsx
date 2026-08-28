@@ -92,7 +92,13 @@ export function SimNext({ track, ai, market, latestBar }: {
 
   return (
     <p className={`simnext${act ? '' : ' quiet'}`} data-testid="sim-pending">
-      {said && !aiLed && (
+      {/* **AI 的判斷永遠要露臉，包括它就是主軌的時候。**
+
+          這裡原本是 `said && !aiLed`——AI 成為主軌時就不印，因為那時候
+          下面那行「決定」講的就是它。但那行只有動作沒有理由，於是 AI 說了
+          什麼**整段消失**。這段程式碼在 AI 從來沒進場過的時候是死碼，
+          加了底倉之後才活過來，才看得出來它漏了東西。 */}
+      {said && (
         <span className="simai" data-testid="sim-ai-today">
           <b>AI 判斷</b>
           <span className="simaiact">{aiActionText(said.action)}</span>
@@ -105,13 +111,18 @@ export function SimNext({ track, ai, market, latestBar }: {
           {said.reason && <span className="simaiwhy">{said.reason}</span>}
         </span>
       )}
-      {act && <Icon name="chevronUp" />}
-      <b>{aiLed ? '決定' : '規則試算'}</b>
-      {p?.signalD && <span className="simaid tnum">{p.signalD} 收盤後</span>}
-      <span className="simnextact">
-        {act ? verb(p) : agree ? '也是不動作' : '什麼都不用做'}
-      </span>
-      {act && <span className="simfill">下一個開盤成交</span>}
+      {/* AI 就是主軌、而且今天不動作時，這一行會變成「決定／什麼都不用做」
+          ——跟上面那塊 AI 判斷講的是同一件事。同意的時候並排兩段是雜訊
+          （跟 `agree` 同一條規矩），所以整行省掉。 */}
+      {(!aiLed || act) && (<>
+        {act && <Icon name="chevronUp" />}
+        <b>{aiLed ? '決定' : '規則試算'}</b>
+        {p?.signalD && <span className="simaid tnum">{p.signalD} 收盤後</span>}
+        <span className="simnextact">
+          {act ? verb(p) : agree ? '也是不動作' : '什麼都不用做'}
+        </span>
+        {act && <span className="simfill">下一個開盤成交</span>}
+      </>)}
 
       {/* 沒有股數與價位，這一行還是不能照做——讀完仍然不知道要在券商輸入什麼。
           明天的開盤價當然不知道，所以用今日收盤估，並且明講是估的。 */}

@@ -29,8 +29,15 @@ const day = (over: Partial<RuleDay> = {}): RuleDay => ({
   ...over,
 })
 
+/**
+ * **底倉關掉。** 這一組驗的是加碼與「今天為什麼不動」的理由，
+ * 而底倉（2026-08-29.1 起預設 2/3）會在第一個交易日就買一筆——
+ * 那會讓「不動作的理由」根本不存在，測試問的問題就消失了。
+ * 底倉自己的理由由 sim-rules.test.ts 的「底倉」那一組驗。
+ */
 const run = (bars: Bar[], days: Record<string, RuleDay>) =>
-  simulate(bars, ruleDecider(days, cfg.initialCash, DEFAULT_RULES), cfg)
+  simulate(bars, ruleDecider(days, cfg.initialCash,
+    { ...DEFAULT_RULES, coreFraction: 0 }), cfg)
 
 describe('成交理由：要有數字，而且對得上當天的分析', () => {
   it('買進：說出加碼區、%b 與 K', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { simulate } from '../src/lib/sim/engine'
 import { ruleDecider, holdDecider, type RuleDay } from '../src/lib/sim/rules'
+import { aiDecider } from '../src/lib/sim/run'
 import { DEFAULT_FEES, DEFAULT_RULES } from '../src/lib/sim/params'
 import type { Bar } from '../src/lib/types'
 
@@ -46,41 +47,108 @@ function run(bars: Bar[], days: Record<string, RuleDay>,
     bars, ruleDecider(days, cfg.initialCash, { ...DEFAULT_RULES, ...over }), cfg)
 }
 
+/**
+ * **驗進場訊號的時候要把底倉關掉。**
+ *
+ * 底倉（`coreFraction`，2026-08-29.1 起預設 2/3）會在第一個交易日就買一筆，
+ * 而這一整組測試問的是「加碼訊號成不成立」——那兩件事互不相干，混在一起的話
+ * 每一條的 `trades` 都會多一筆底倉，斷言全部要改成「第 2 筆」，
+ * 而測試想講的東西會被那個位移淹掉。
+ *
+ * 底倉自己的行為由下面「底倉」那一組驗。
+ */
+const noCore = (bars: Bar[], days: Record<string, RuleDay>,
+  over: Partial<typeof DEFAULT_RULES> = {}) =>
+  run(bars, days, { coreFraction: 0, ...over })
+
+describe('底倉：這筆錢是規劃給這一檔的，不是在場外等訊號', () => {
+  /**
+   * 實測 5 檔、99～132 個交易日：原本的規則（100% 現金起手）平均只有
+   * **37% 的日子錢在場上**，2454 更是 99 天裡只有 1 天。「規劃給這一檔
+   * 的錢」整段期間在場外，跟沒有規劃它是同一件事。
+   *
+   * 改的依據不是哪個數字好看（四種底倉比例全部輸給買了不動），是 §4 的
+   * 用詞：加碼與減碼都是部位調整，而你沒辦法從零減碼。
+   */
+  /** 進場訊號一個都不成立的日子——底倉不該理會它們 */
+  const noSignal = (over: Partial<RuleDay> = {}): RuleDay => ({
+    levels: { add: { lo: 99, hi: 101 }, sell: { lo: 120, hi: 122 }, stop: { price: 90 } },
+    pctB: 0.9, k: 85, d: 84, kPrev: 84, dPrev: 85,   // K 在高檔、沒有金叉
+    ...over,
+  })
+
+  it('**第一個交易日就進場，不等訊號**', () => {
+    const r = run(threeDays(115, 110), { '2026-08-17': noSignal() })
+    expect(r.trades).toHaveLength(1)
+    expect(r.trades[0]!.side).toBe('buy')
+    expect(r.trades[0]!.triggers).toContain('core')
+  })
+
+  it('投入的是本金的 coreFraction，不是全部', () => {
+    const r = run(threeDays(115, 110), { '2026-08-17': noSignal() })
+    const spent = r.trades[0]!.qty * r.trades[0]!.price
+    expect(spent / cfg.initialCash).toBeCloseTo(DEFAULT_RULES.coreFraction!, 1)
+  })
+
+  it('**底倉要有理由**——沒有理由的成交紀錄等於沒有紀錄', () => {
+    const r = run(threeDays(115, 110), { '2026-08-17': noSignal() })
+    expect(r.trades[0]!.reason).toContain('底倉')
+  })
+
+  it('只建一次，不會每天再買一筆', () => {
+    const days = Object.fromEntries(
+      ['2026-08-17', '2026-08-18', '2026-08-19'].map((d) => [d, noSignal()]))
+    const r = run(threeDays(115, 110), days)
+    expect(r.trades.filter((t) => t.triggers.includes('core'))).toHaveLength(1)
+  })
+
+  it('關掉（0）就回到原本的行為：訊號不成立就不進場', () => {
+    const r = noCore(threeDays(115, 110), { '2026-08-17': noSignal() })
+    expect(r.trades).toHaveLength(0)
+  })
+
+  it('底倉 2/3 之後剛好還剩一批加碼額度——加起來是滿倉', () => {
+    // batches = 3，所以每批是 1/3。2/3 + 1/3 = 1，數字要合得起來，
+    // 不然「分批進場」會變成一個永遠用不完或用超過的額度。
+    expect(DEFAULT_RULES.coreFraction! + 1 / DEFAULT_RULES.batches).toBeCloseTo(1, 6)
+  })
+})
+
 describe('加碼：價格到了只是必要條件', () => {
   it('四個條件都成立 → 買一批', () => {
-    const r = run(threeDays(102, 100), { '2026-08-17': goodAdd() })
+    const r = noCore(threeDays(102, 100), { '2026-08-17': goodAdd() })
     expect(r.trades).toHaveLength(1)
     expect(r.trades[0]!.side).toBe('buy')
     expect(r.trades[0]!.triggers).toContain('add')
   })
 
   it('價格沒進加碼區 → 不買', () => {
-    const r = run(threeDays(115, 110), { '2026-08-17': goodAdd() })
+    const r = noCore(threeDays(115, 110), { '2026-08-17': goodAdd() })
     expect(r.trades).toHaveLength(0)
   })
 
   it('%b 沒回到 0.5 以下 → 不買，錢繼續放著', () => {
-    const r = run(threeDays(102, 100), { '2026-08-17': goodAdd({ pctB: 0.62 }) })
+    const r = noCore(threeDays(102, 100), { '2026-08-17': goodAdd({ pctB: 0.62 }) })
     expect(r.trades).toHaveLength(0)
     expect(r.state.cash).toBe(50_000)
   })
 
   it('K 還在高檔 → 不買', () => {
-    const r = run(threeDays(102, 100), {
+    const r = noCore(threeDays(102, 100), {
       '2026-08-17': goodAdd({ k: 55, d: 60, kPrev: 50, dPrev: 61 }),
     })
     expect(r.trades).toHaveLength(0)
   })
 
   it('K 在低檔但沒有金叉（還在 D 下方）→ 不買', () => {
-    const r = run(threeDays(102, 100), {
+    const r = noCore(threeDays(102, 100), {
       '2026-08-17': goodAdd({ k: 20, d: 25, kPrev: 22, dPrev: 24 }),
     })
     expect(r.trades).toHaveLength(0)
   })
 
   it('每批投入約為本金的三分之一', () => {
-    const r = run(threeDays(102, 100), { '2026-08-17': goodAdd() })
+    const r = noCore(threeDays(102, 100), { '2026-08-17': goodAdd() })
     const t = r.trades[0]!
     const spent = t.qty * t.price + t.fee
     expect(spent).toBeGreaterThan(50_000 / 3 * 0.9)
@@ -97,7 +165,7 @@ describe('加碼：價格到了只是必要條件', () => {
       bar('2026-08-24', 100, 100, 102, 100),
     ]
     const days = Object.fromEntries(bars.map((b) => [b.date, goodAdd()]))
-    const r = run(bars, days)
+    const r = noCore(bars, days)
     expect(r.trades.filter((t) => t.side === 'buy')).toHaveLength(DEFAULT_RULES.batches)
   })
 })
@@ -114,7 +182,7 @@ describe('減碼：觸及賣出區賣一半，不是出清', () => {
   const trimOnly = goodAdd({ pctB: 0.8 })
 
   it('有持股時觸及賣出區 → 賣掉一半', () => {
-    const r = run(bars, { '2026-08-17': goodAdd(), '2026-08-19': trimOnly })
+    const r = noCore(bars, { '2026-08-17': goodAdd(), '2026-08-19': trimOnly })
     const sells = r.trades.filter((t) => t.side === 'sell')
     expect(sells).toHaveLength(1)
     const bought = r.trades[0]!.qty
@@ -123,7 +191,7 @@ describe('減碼：觸及賣出區賣一半，不是出清', () => {
   })
 
   it('沒有持股時觸及賣出區 → 什麼都不做', () => {
-    const r = run(bars, { '2026-08-19': trimOnly })
+    const r = noCore(bars, { '2026-08-19': trimOnly })
     expect(r.trades).toHaveLength(0)
   })
 })
@@ -233,7 +301,7 @@ describe('金叉是「先架起訊號」，不是「同一天」（params 2026-0
   ]
 
   it('金叉在前、價格在後 → 買得到', () => {
-    const r = run(bars, { '2026-08-17': crossDay, '2026-08-19': laterDip })
+    const r = noCore(bars, { '2026-08-17': crossDay, '2026-08-19': laterDip })
     expect(r.trades).toHaveLength(1)
     expect(r.trades[0]!.side).toBe('buy')
     expect(r.trades[0]!.signalD).toBe('2026-08-19')
@@ -241,7 +309,7 @@ describe('金叉是「先架起訊號」，不是「同一天」（params 2026-0
 
   it('從頭到尾沒有低檔金叉 → 價格再怎麼進加碼區也不買', () => {
     const noCross = goodAdd({ k: 28, d: 26, kPrev: 27, dPrev: 25 })
-    const r = run(bars, { '2026-08-17': noCross, '2026-08-19': noCross })
+    const r = noCore(bars, { '2026-08-17': noCross, '2026-08-19': noCross })
     expect(r.trades).toHaveLength(0)
   })
 
@@ -250,7 +318,7 @@ describe('金叉是「先架起訊號」，不是「同一天」（params 2026-0
     // 要求同日成立的話，台股這半年一次都不會進場（params 2026-08-21.3）。
     const dip = goodAdd({ k: 21, d: 30, kPrev: 25, dPrev: 33 })       // 回低檔，沒交叉
     const crossLate = goodAdd({ k: 36, d: 34, kPrev: 30, dPrev: 35 }) // 金叉，但 K 已 36
-    const r = run(bars, {
+    const r = noCore(bars, {
       '2026-08-17': dip,
       '2026-08-18': crossLate,
       '2026-08-19': goodAdd({ k: 40, d: 38, kPrev: 39, dPrev: 37 }),  // 價格進區
@@ -261,7 +329,7 @@ describe('金叉是「先架起訊號」，不是「同一天」（params 2026-0
 
   it('只有金叉、從來沒回過低檔 → 不算數', () => {
     const highCross = goodAdd({ k: 55, d: 52, kPrev: 50, dPrev: 53 })
-    const r = run(bars, {
+    const r = noCore(bars, {
       '2026-08-17': highCross,
       '2026-08-19': goodAdd({ k: 45, d: 43, kPrev: 44, dPrev: 42 }),
     })
@@ -270,7 +338,7 @@ describe('金叉是「先架起訊號」，不是「同一天」（params 2026-0
 
   it('金叉之後 K 衝上高檔 → 訊號失效，那時才進加碼區也不買（那是追高）', () => {
     const overbought = goodAdd({ k: 82, d: 75, kPrev: 80, dPrev: 74 })
-    const r = run(bars, {
+    const r = noCore(bars, {
       '2026-08-17': crossDay,
       '2026-08-18': overbought,   // K > 70 解除
       '2026-08-19': laterDip,
@@ -295,7 +363,7 @@ describe('金叉是「先架起訊號」，不是「同一天」（params 2026-0
     const after = goodAdd({ k: 28, d: 26, kPrev: 27, dPrev: 25 })
     const days: Record<string, RuleDay> = { '2026-08-17': goodAdd(), '2026-08-19': goodAdd() }
     for (const b of stopBars.slice(3)) days[b.date] = after
-    const r = run(stopBars, days)
+    const r = noCore(stopBars, days)
     expect(r.trades.filter((t) => t.side === 'buy' && t.signalD > '2026-08-19')).toHaveLength(0)
   })
 })
@@ -351,5 +419,57 @@ describe('決策函式是有狀態的：每次模擬都要重新建一個', () =
     const partial = simulate(bars.slice(0, 3), ruleDecider(days, 50_000, DEFAULT_RULES), cfg)
     expect(partial.equity).toEqual(full.equity.slice(0, 3))
     expect(partial.trades).toEqual(full.trades.filter((t) => t.fillD <= '2026-08-19'))
+  })
+})
+
+describe('AI 軌的底倉：「觀望」不該等於站在場外', () => {
+  /**
+   * AI 軌是重播它自己記下來的決定，而 `hold` 在空手的帳戶上什麼都不做。
+   * 實測到 2026-08-29：AI 判斷了 5 天全部 hold，三個帳戶因此一直是 0.00%
+   * ——主角從頭到尾沒有進場。
+   *
+   * 但 AI 的提示詞講的是**加碼／減碼／觀望**，那三個詞預設你手上有東西。
+   * 「觀望」該是「維持現有部位」，不是「繼續站在場外」。
+   */
+  const core = { fraction: 2 / 3, initialCash: cfg.initialCash }
+  const days = ['2026-08-17', '2026-08-18', '2026-08-19']
+  const bars = threeDays(102, 100)
+  const log = (d: string, action: string | null) =>
+    ({ d, status: 'ok', action, confidence: null, reason: null })
+
+  it('**AI 說觀望 → 底倉還是要建起來**', () => {
+    const r = simulate(bars, aiDecider(days.map((d) => log(d, 'hold')), core), cfg)
+    expect(r.trades).toHaveLength(1)
+    expect(r.trades[0]!.triggers).toContain('core')
+  })
+
+  it('底倉不是 AI 的判斷，不要標成 AI 說的', () => {
+    const r = simulate(bars, aiDecider([log('2026-08-17', 'hold')], core), cfg)
+    expect(r.trades[0]!.reason).toContain('底倉')
+    expect(r.trades[0]!.triggers.some((t) => t.startsWith('ai:'))).toBe(false)
+  })
+
+  it('AI 自己就說要買 → 聽它的，不要再幫它建一次底倉', () => {
+    const r = simulate(bars, aiDecider([log('2026-08-17', 'buy_50')], core), cfg)
+    expect(r.trades).toHaveLength(1)
+    expect(r.trades[0]!.triggers).toContain('ai:buy_50')
+  })
+
+  it('**AI 賣光之後不要自動買回去**——那會把它的決定改掉', () => {
+    // 規則軌的底倉在止損冷卻後會重建，那是對的：止損是調節不是離場。
+    // AI 軌沒有止損，它清空部位只會是因為它自己決定要賣。
+    const long = [...days, '2026-08-20', '2026-08-21']
+      .map((d) => bar(d, 100, 100, 102, 100))
+    const r = simulate(long, aiDecider([
+      log('2026-08-17', 'hold'), log('2026-08-18', 'sell_100'),
+      log('2026-08-19', 'hold'), log('2026-08-20', 'hold'),
+    ], core), cfg)
+    expect(r.trades.filter((t) => t.triggers.includes('core'))).toHaveLength(1)
+    expect(r.trades.filter((t) => t.side === 'buy')).toHaveLength(1)
+  })
+
+  it('沒給底倉就是原本的行為：觀望＝什麼都不做', () => {
+    const r = simulate(bars, aiDecider(days.map((d) => log(d, 'hold'))), cfg)
+    expect(r.trades).toHaveLength(0)
   })
 })
