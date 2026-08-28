@@ -20,7 +20,8 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createAdminClient } from '../src/lib/supabase/admin'
 import { rebuildAll } from '../src/lib/sim/run'
-import { waitForIngestToFinish } from '../src/lib/jobs'
+import { waitForIngestToFinish, waitForFreshIngest } from '../src/lib/jobs'
+import { taipeiToday } from '../src/lib/freshness'
 import { buildPrompt, allowedNumbers, type AiFacts } from '../src/lib/ai/prompt'
 import { parseDecision } from '../src/lib/ai/decide'
 
@@ -85,6 +86,38 @@ async function main() {
    * 等不到也照樣往下做，只是記一筆。AI 這條線的價值在於每天都有判斷，
    * 為了一個可能卡住的抓取而整天不判斷，是拿確定的損失換不確定的風險。
    */
+  /**
+   * **先等今天的抓取跑完，再等它不要跟我搶。**
+   *
+   * 兩件事，順序不能顛倒：
+   *
+   *   1. 資料要夠新——實測 2026-08-28，Vercel Cron 排 23:30 UTC 卻 23:58 才跑，
+   *      而本機 AI 準時 07:35 開跑，比抓取早了 23 分鐘。它對著昨天的 K 棒
+   *      做判斷，NVDA 被「早於起算日」擋掉、另外兩檔「已有紀錄」——
+   *      整輪什麼都沒做，而 log 看起來完全正常。
+   *   2. 不要同時重建帳戶——那是下面那一支在管的。
+   *
+   * `TIDELINE_AI_NO_WAIT=1` 可以跳過等待。給手動除錯用，正式排程不要設。
+   */
+  if (process.env.TIDELINE_AI_NO_WAIT !== '1') {
+    // 「夠新」的界線：今天台北 00:00。台股的 14:30 那一輪與美股的 07:30
+    // 那一輪都落在同一個台北日期裡，所以一條線就夠。
+    const since = new Date(`${taipeiToday()}T00:00:00+08:00`)
+    const fresh = await waitForFreshIngest({
+      since,
+      fetchRows: async () => {
+        const { data } = await db.from('job_runs')
+          .select('started_at, finished_at')
+          .order('started_at', { ascending: false }).limit(10)
+        return (data ?? []) as { started_at: string; finished_at: string | null }[]
+      },
+      log: (m) => console.log(m),
+    })
+    if (fresh === 'timeout') {
+      console.log('⚠ 等不到今天的抓取，仍然繼續——這一輪的判斷是根據**舊資料**做的')
+    }
+  }
+
   const wait = await waitForIngestToFinish({
     fetchRows: async () => {
       const { data } = await db.from('job_runs')

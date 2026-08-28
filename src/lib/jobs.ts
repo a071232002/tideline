@@ -87,3 +87,65 @@ export async function waitForIngestToFinish(
     await sleep(intervalMs)
   }
 }
+
+/**
+ * 等到**今天的抓取真的跑完**，而不是等時鐘。
+ *
+ * ## 為什麼「差五分鐘」不夠
+ *
+ * 原本的安排是 Vercel Cron 07:30 抓取、本機 07:35 跑 AI。實測 2026-08-28：
+ * Cron 排在 23:30 UTC，**實際 23:58 才跑**（Vercel 的 cron 不保證準時），
+ * 而本機的 AI 準時在 07:35 開跑——比抓取早了 23 分鐘。
+ *
+ * 結果不是「兩邊打架」，是**AI 看到的是昨天的資料**：NVDA 的 K 棒還停在
+ * 前一天，於是被「早於起算日」擋掉；另外兩檔則是「已有紀錄」。整輪安靜地
+ * 什麼都沒做，而 log 看起來完全正常。
+ *
+ * `waitForIngestToFinish` 解不了這個：它只在抓取**正在跑**的時候等，
+ * 而這次抓取根本還沒開始。要等的是「今天的那一輪已經結束」。
+ *
+ * ## 逾時就繼續，但要留紀錄
+ *
+ * 跟另一支同樣的取捨：AI 這條線的價值在於每天都有判斷。為了一個可能
+ * 根本不會來的抓取而整天不判斷，是拿確定的損失換不確定的風險。
+ * 但那時候它看到的是舊資料，所以一定要說出來。
+ */
+export async function waitForFreshIngest(opts: {
+  /** 讀出最近幾筆抓取紀錄（含未結束的） */
+  fetchRows: () => Promise<JobRow[]>
+  /** 「夠新」的界線：`finished_at` 要晚於這個時間 */
+  since: Date
+  timeoutMs?: number
+  intervalMs?: number
+  now?: () => number
+  sleep?: (ms: number) => Promise<void>
+  log?: (msg: string) => void
+}): Promise<'fresh' | 'timeout'> {
+  const {
+    fetchRows, since,
+    // 預設等 45 分鐘：Vercel 的 cron 實測遲到 28 分鐘，留一倍餘裕
+    timeoutMs = 45 * 60_000,
+    intervalMs = 60_000,
+    now = () => Date.now(),
+    sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+    log = () => {},
+  } = opts
+
+  const deadline = now() + timeoutMs
+  const cutoff = since.getTime()
+  let announced = false
+
+  for (;;) {
+    const rows = await fetchRows()
+    const done = rows.some((r) =>
+      r.finished_at !== null && Date.parse(r.finished_at) >= cutoff)
+    if (done) return 'fresh'
+
+    if (!announced) {
+      log(`還沒看到今天的抓取（要晚於 ${since.toISOString().slice(11, 16)} UTC 結束），等它`)
+      announced = true
+    }
+    if (now() >= deadline) return 'timeout'
+    await sleep(intervalMs)
+  }
+}
