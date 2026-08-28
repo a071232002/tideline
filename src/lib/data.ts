@@ -538,8 +538,23 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
     .eq('symbol_id', symbolId)
   if (!accounts || accounts.length === 0) return []
 
-  const out: SimTrack[] = []
-  for (const acc of accounts) {
+  /**
+   * **三個帳戶平行查，不要排隊。**
+   *
+   * 這裡原本是一個 for 迴圈，每個帳戶依序做 2～3 次查詢——三條軌道就是
+   * 8～10 次**循序**往返。本機的 Supabase 在 localhost 所以看不出來，
+   * 部署之後每一次都是真的網路往返：實測正式站的個股頁 1,034～2,108ms，
+   * 而 `getStockPage` 的部分已經被 cron 暖過快取了，剩下的就是這裡。
+   *
+   * 這三個帳戶之間沒有任何依賴——rule、ai、hold 各查各的。排隊唯一的
+   * 效果就是把三份延遲加起來。
+   *
+   * 每個帳戶內部仍然是循序的（淨值、成交、AI 紀錄），那是可以再壓的，
+   * 但先解掉最外層這一圈：三倍變一倍。
+   */
+  // 回傳型別要標出來：少了它，物件字面值的 `reason: string | null`
+  // 推不回 SimTrack 的 `reason: string`，而錯誤訊息會指到很遠的地方
+  const out: SimTrack[] = await Promise.all(accounts.map(async (acc): Promise<SimTrack> => {
     const id = acc.id as string
     // 每個帳戶每個交易日一列，由舊到新——超過 1000 列之後截斷丟掉的是最新的，
     // 也就是曲線末端會停住，而畫面看起來完全正常
@@ -572,7 +587,7 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
       }
     }
 
-    out.push({
+    return {
       track: acc.track as SimTrack['track'],
       initialTwd: Number(acc.initial_twd),
       initialCash: Number(acc.initial_cash),
@@ -618,8 +633,8 @@ export async function getSim(symbolId: string): Promise<SimTrack[]> {
       pending: (acc.pending as SimTrack['pending']) ?? null,
       startedOn: acc.started_on as string,
       ai: aiLog,
-    })
-  }
+    }
+  }))
   return out
 }
 
