@@ -200,6 +200,14 @@ export function holdDecider(): Decider {
   return (ctx) => {
     if (done || ctx.index !== 0) return null
     done = true
-    return { buyCash: Infinity, triggers: ['initial'], decidedBy: 'rule' }
+    // **對照組也要說出它為什麼買。**
+    // 沒有理由的成交紀錄等於沒有紀錄：三個月後看到「08-20 買 21 股」，
+    // 那句話裡沒有任何一個字回答為什麼。這一筆先前是唯一沒有理由的，
+    // 因為它是對照組，沒人替它想過——但它照樣出現在畫面的成交清單裡。
+    return {
+      buyCash: Infinity, triggers: ['initial'], decidedBy: 'rule',
+      reason: '買進持有對照組：第一個交易日全額買進，之後不再動作。'
+        + '它存在是為了回答「規則有沒有比什麼都不做更好」',
+    }
   }
 }

@@ -3,6 +3,7 @@ import { fetchPaged } from '../supabase/paged'
 import { simulate, type Decider, type CorporateAction, type SimResult } from './engine'
 import { ruleDecider, holdDecider, type RuleDay } from './rules'
 import { DEFAULT_CAPITAL_TWD, DEFAULT_FEES, DEFAULT_RULES, PARAMS_VERSION } from './params'
+import { logRowsFor } from './trade-log'
 import { rateOn, FX_PAIR, type FxRates } from '../sources/fx'
 import { RULES_VERSION } from '../backfill'
 import type { Bar } from '../types'
@@ -281,14 +282,49 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
      * 判斷不行。
      */
     const { data: aiAcc } = await db.from('sim_accounts')
-      .select('id').eq('user_id', userId).eq('symbol_id', sym.id).eq('track', 'ai')
+      .select('id, started_on, params')
+      .eq('user_id', userId).eq('symbol_id', sym.id).eq('track', 'ai')
       .limit(1).maybeSingle()
-    if (aiAcc) {
+
+    /**
+     * **帳戶已經存在的話，起算日以帳戶自己記的為準。**
+     *
+     * 原本這裡一律用 `watchlist.added_at` 推。但畫面顯示的是
+     * `sim_accounts.started_on`——兩個不同的事實，一旦分岔，頁面上那句
+     * 「X 起追蹤」講的就不是模擬真正涵蓋的區間，而且不會有任何提示。
+     *
+     * 改了規則參數之後重新起算（`npm run sim:restart`）靠的也是這一條：
+     * 把帳戶的 `started_on` 往後移到下一個交易日，重建就會從那天開始。
+     */
+    const ownStart = aiAcc?.started_on as string | undefined
+    if (ownStart) {
+      startedOn = ownStart
+    } else if (aiAcc) {
       const { data: firstLog } = await db.from('sim_ai_log')
         .select('d').eq('account_id', aiAcc.id as string)
         .order('d', { ascending: true }).limit(1).maybeSingle()
       const first = firstLog?.d as string | undefined
       if (first && first < startedOn) startedOn = first
+    }
+
+    /**
+     * **規則變了就不准悄悄重建。**
+     *
+     * 成交是推導的，所以重建平常沒問題——同一套算式再算一次，結果一樣。
+     * 但參數換了之後重建，等於用今天才決定的規則去寫上週的成交，
+     * 而上週的走勢已經知道了。實測 2026-08-29（週六，沒有開市）：
+     * 改完 `coreFraction` 重建之後，週五憑空多出三筆成交——那一天實際上
+     * 什麼都沒發生過。**那不是紀錄，是重算的結果。**
+     *
+     * 這跟 `ai-decide` 的「沒跑到就記 missing，不補，事後補等於偷看未來」
+     * 是同一條規矩，只是換成規則軌。所以這裡擋下來，要求明確地重新起算。
+     */
+    const storedVersion = (aiAcc?.params as { version?: string } | null)?.version
+    if (storedVersion !== undefined && storedVersion !== PARAMS_VERSION) {
+      throw new Error(
+        `${sym.code}：帳戶是用參數 ${storedVersion} 跑的，現在是 ${PARAMS_VERSION}。`
+        + '直接重建會把舊日子的成交用新規則改寫掉（那些日子的走勢已經知道了）。'
+        + '要換規則請跑 `npm run sim:restart -- --from <下一個交易日>`。')
     }
     const bars: Bar[] = (barRows ?? [])
       .filter((b) => (b.d as string) >= startedOn)
@@ -444,11 +480,26 @@ async function ensureAccount(
  * 先刪再寫而不是 upsert：規則或費率改了之後，舊的成交筆數可能**變少**，
  * upsert 不會移除已經不該存在的那幾筆——那正是 `daily_bars` 踩過的坑
  * （盤中半根修好之後仍然躺在資料庫裡）。
+ *
+ * **但重寫之前先把這一輪算出來的東西記進 `sim_trade_log`。**
+ * 那張表只進不出：`sim_trades` 每天被刪掉重寫，所以它是重算的結果不是
+ * 紀錄；要回答「這筆買賣是什麼時候、用哪一組參數算出來的」，看的是 log。
+ * 同樣的內容不重記（指紋一樣就 on conflict do nothing），內容變了就多一列
+ * ——兩列都留著，那正是「哪裡有問題」要看的東西。
  */
 async function writeTrack(
   accountId: string, r: SimResult, originByDate: Map<string, string>,
 ): Promise<void> {
   const db = createAdminClient()
+
+  // 先記歷程再刪。順序反過來的話，中途失敗就兩邊都沒有了
+  if (r.trades.length > 0) {
+    const { error } = await db.from('sim_trade_log')
+      .upsert(logRowsFor(accountId, r.trades, PARAMS_VERSION),
+        { onConflict: 'account_id,signal_d,side,fingerprint', ignoreDuplicates: true })
+    if (error) throw new Error(`寫入買賣歷程失敗：${error.message}`)
+  }
+
   await db.from('sim_trades').delete().eq('account_id', accountId)
   await db.from('sim_equity').delete().eq('account_id', accountId)
 
