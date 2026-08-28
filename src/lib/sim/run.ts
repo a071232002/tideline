@@ -374,9 +374,23 @@ export async function rebuildAll(userId: string, capitalTwd = DEFAULT_CAPITAL_TW
      */
     if (bars.length === 0) {
       for (const t of TRACKS) {
-        await ensureAccount(userId, sym, t, {
+        const id = await ensureAccount(userId, sym, t, {
           capitalTwd: capitalForSymbol, initialCash, fxAtOpen, startedOn,
         })
+        /**
+         * **舊的成交與淨值一定要清掉。**
+         *
+         * 原本這裡只是 `continue`，因為「還沒有交易日」通常代表帳戶是新的，
+         * 沒有東西好清。但重新起算（`sim:restart`）會把起算日往**後**移到
+         * 下一個交易日——那時候這個分支會成立，而帳戶裡躺著的是上一套規則
+         * 算出來的成交。不清的話畫面會繼續顯示一段不再成立的歷史，
+         * 而且它看起來完全正常。
+         *
+         * 實測 2026-08-29：把正式站的起算日改到 08-31 之後，08-27 那筆
+         * 底倉還好端端地留在畫面上。
+         */
+        await db.from('sim_trades').delete().eq('account_id', id)
+        await db.from('sim_equity').delete().eq('account_id', id)
         out.push({ code: sym.code, track: t, trades: 0, retPct: 0, daysInMarket: 0,
           totalFees: 0, pending: null, skipped: `${startedOn} 起追蹤，還沒有交易日` })
       }
