@@ -1,4 +1,5 @@
 import type { SimTrack } from '@/lib/data'
+import { waitingState } from '@/lib/sim/waiting'
 import { CapitalForm } from './CapitalForm'
 
 /**
@@ -23,10 +24,13 @@ const money = (v: number, currency: string) =>
     ? Math.round(v).toLocaleString('en-US')
     : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-export function SimCard({ tracks, market, symbolId }: {
+export function SimCard({ tracks, market, symbolId, addHi, close }: {
   tracks: SimTrack[]
   market: 'TW' | 'US'
   symbolId: string
+  /** 加碼區上緣。用來回答「還差多少才進場」——空手的日子裡那是唯一會變的數字 */
+  addHi?: number | null
+  close?: number | null
 }) {
   if (tracks.length === 0) return null
 
@@ -40,6 +44,15 @@ export function SimCard({ tracks, market, symbolId }: {
   const aiLive = ai !== undefined && ai.trades > 0
   const lead = aiLive ? ai! : rule
   const excess = lead.retPct - hold.retPct
+
+  /**
+   * 這個帳戶現在是「有在跑」、「還沒開始」、還是「跑著但一直空手」。
+   * 三種狀態該給的主數字不一樣——見下面 simscores 那一段的說明。
+   */
+  const wait = waitingState({
+    totalDays: lead.totalDays, trades: lead.trades, daysInMarket: lead.daysInMarket,
+    holdTrades: hold.trades, addHi: addHi ?? null, close: close ?? null,
+  })
 
   const cur = rule.currency
   const inMarketPct = rule.totalDays > 0
@@ -122,23 +135,62 @@ export function SimCard({ tracks, market, symbolId }: {
         <b className="tnum">{money(lead.initialTwd, 'TWD')} 元</b>
       </p>
 
-      <div className={`simscores two${tooShort ? ' short' : ''}`}>
-        <div className="simscore lead">
-          <div className="lab">報酬率</div>
-          <div className={`num tnum ${lead.retPct >= 0 ? 'chg-up' : 'chg-down'}`}
-            data-testid="sim-ret">{pct(lead.retPct)}</div>
-        </div>
-        <div className="simscore">
-          {/* 百分比在幾千塊的本金上很難有體感。金額才是「賺賠多少」 */}
-          <div className="lab">獲益</div>
-          <div className={`num tnum ${profit >= 0 ? 'chg-up' : 'chg-down'}`}
-            data-testid="sim-profit">
-            {profit >= 0 ? '+' : '−'}{money(Math.abs(profit), cur)}
+      {/* **一筆都沒成交的時候，不要把 0.00% 放在最大的字級上。**
+
+          那個 0 是定義上的 0，不是量出來的 0：帳戶整筆放在現金，
+          報酬率當然是 0.00%、獲益當然是 +0，而且明天、後天都還是。
+          每天真正會變的是「離進場還差多少」，而那句話原本在小字裡——
+          字級跟資訊量剛好顛倒。
+
+          它還蓋掉一個真實的差別（實測 2026-08-29 正式站）：
+            0050  跑了兩天、條件沒成立、刻意空手      → 0.00%
+            NVDA  只有一個交易日、連對照組都還沒成交  → 0.00%
+          兩種狀態要的下一步完全不同，畫面上卻一模一樣。
+
+          數字沒有被拿掉，是被搬到「更多數字與設定」裡——它們照算，
+          只是不該在有意義之前佔著主位。 */}
+      {wait.kind === 'trading' ? (
+        <div className={`simscores two${tooShort ? ' short' : ''}`}>
+          <div className="simscore lead">
+            <div className="lab">報酬率</div>
+            <div className={`num tnum ${lead.retPct >= 0 ? 'chg-up' : 'chg-down'}`}
+              data-testid="sim-ret">{pct(lead.retPct)}</div>
+          </div>
+          <div className="simscore">
+            {/* 百分比在幾千塊的本金上很難有體感。金額才是「賺賠多少」 */}
+            <div className="lab">獲益</div>
+            <div className={`num tnum ${profit >= 0 ? 'chg-up' : 'chg-down'}`}
+              data-testid="sim-profit">
+              {profit >= 0 ? '+' : '−'}{money(Math.abs(profit), cur)}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="simwait" data-testid="sim-wait">
+          <div className="lab">
+            {wait.kind === 'not-started' ? '還沒開始' : '空手，等進場'}
+          </div>
+          <div className="num tnum" data-testid="sim-wait-num">
+            {wait.kind === 'not-started'
+              ? '尚無成交'
+              : wait.gapPct === null
+                ? '已在加碼區'
+                : `還要跌 ${wait.gapPct.toFixed(1)}%`}
+          </div>
+          <p className="simwaitwhy">
+            {wait.kind === 'not-started'
+              ? '訊號要到下一個開盤才成交，連買了不動那條都還沒建立部位——'
+                + '現在所有數字都還不是結果。'
+              : wait.gapPct === null
+                ? `收盤已經在加碼區 ${addHi?.toFixed(2)} 以下，`
+                  + '擋住的是另一個條件（%b 或低檔金叉的訊號還沒架起來）。'
+                : `收盤 ${close?.toFixed(2)}，加碼區上緣 ${addHi?.toFixed(2)}。`
+                  + '四個條件要同時成立才進場，價格只是其中一個。'}
+          </p>
+        </div>
+      )}
 
-      {tooShort && (
+      {wait.kind === 'trading' && tooShort && (
         <p className="simwhy" data-testid="sim-verdict">
           樣本只有 {lead.totalDays} 個交易日，還讀不出結果。
         </p>
@@ -152,11 +204,14 @@ export function SimCard({ tracks, market, symbolId }: {
           原本這裡有三段各自在講同一件事：AI 那句「都選擇不進場」、
           統計裡的「有股票的天數 0/4」、以及「期間內未觸發任何進場條件」。
           三段都是真的，但它們是同一個事實的三種說法。 */}
+      {/* 「全程空手」上面那一塊已經講過了，這裡只留 AI 的部分——
+          同一件事講兩次會讓兩次都變得比較不重要。 */}
       {nothingHappened ? (
-        <p className="simidle" data-testid="sim-idle">
-          {lead.totalDays} 個交易日全程空手，進場條件一直沒有同時成立
-          {ai?.ai && ai.ai.days > 0 ? `；AI 判斷 ${ai.ai.days} 天也都選擇不進場` : ''}。
-        </p>
+        ai?.ai && ai.ai.days > 0 ? (
+          <p className="simidle" data-testid="sim-idle">
+            AI 判斷 {ai.ai.days} 天，每一天都選擇不進場——那是它的決定，不是缺席。
+          </p>
+        ) : null
       ) : (
         <>
           {ai?.ai && ai.ai.days > 0 && (
@@ -235,6 +290,15 @@ export function SimCard({ tracks, market, symbolId }: {
               那個對照的用意是防止自我欺騙（大盤漲 10% 而你賺 4% 不是準），
               所以**軌道照算、數字照留**，只是每天要回答的問題不是「有沒有
               贏大盤」，是「我這筆錢現在怎麼樣」。§11 的回顧仍然用得到它。 */}
+          {/* 空手的日子裡這兩個是定義上的 0，所以從卡片正面搬下來。
+              它們照算、照存，只是不該在有意義之前佔著最大的字級。 */}
+          {wait.kind !== 'trading' && (
+            <>
+              <div><dt>報酬率</dt><dd className="tnum" data-testid="sim-ret">{pct(lead.retPct)}</dd></div>
+              <div><dt>獲益</dt><dd className="tnum" data-testid="sim-profit">
+                {profit >= 0 ? '+' : '−'}{money(Math.abs(profit), cur)}</dd></div>
+            </>
+          )}
           <div><dt>買了不動</dt><dd className="tnum">{pct(hold.retPct)}</dd></div>
           <div><dt>與買了不動的差距</dt>
             <dd className={`tnum ${excess >= 0 ? 'chg-up' : 'chg-down'}`}>{pct(excess)}</dd></div>

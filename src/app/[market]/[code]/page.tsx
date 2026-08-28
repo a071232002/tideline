@@ -179,7 +179,8 @@ export default async function StockPage({
       </section>
 
       <h2 className="secttl" data-testid="sect-check">這些建議準不準</h2>
-      <SimCard tracks={sim} market={page.symbol.market} symbolId={page.symbol.id} />
+      <SimCard tracks={sim} market={page.symbol.market} symbolId={page.symbol.id}
+        addHi={levels.add?.hi ?? null} close={close} />
 
       <h2 className="secttl" data-testid="sect-why">技術面依據</h2>
 

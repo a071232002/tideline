@@ -1000,6 +1000,25 @@ a { color: inherit; }
   border-left: 1px solid var(--line); padding-left: 10px;
 }
 
+/* 一筆都沒成交時取代那兩個數字的區塊。
+   主數字不是百分比而是一句短話（「還要跌 2.8%」「尚無成交」），
+   所以字級比 .simscore .num 小一級——它要被讀，不是被掃過去。
+   左邊那條線是狀態標記，跟報酬率那組的視覺重量刻意不同：
+   看到它就知道這張卡現在講的不是成績。 */
+.simwait {
+  margin: 14px 0 0; padding-left: var(--sp-6);
+  border-left: 3px solid var(--line);
+}
+.simwait .lab { font-size: var(--t-label); color: var(--muted); }
+.simwait .num {
+  font-size: var(--n-sm); font-weight: 800; margin-top: 2px; color: var(--ink);
+  -webkit-text-stroke: var(--stroke-fix) currentColor;
+}
+.simwaitwhy {
+  font-size: var(--t-micro); color: var(--ink2);
+  margin: var(--sp-3) 0 0; line-height: var(--lh-normal);
+}
+
 /* 卡片內部要有階層，不然五種資訊同級＝沒有重點：
    報酬率（主）→ 一句結論 → 統計 → 成交紀錄 → 假設揭露（最輕） */
 .simwhy {
