@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runIngest } from '@/lib/pipeline'
-import { invalidateAnalysis } from '@/lib/data'
+import { invalidateAnalysis, getStockPage, getWatchedSymbols } from '@/lib/data'
 
 /**
  * 每日抓取的 HTTP 入口，給 Vercel Cron 用。
@@ -59,12 +59,37 @@ export async function GET(req: Request) {
      * 使用者仍然要等一小時——而畫面上完全看不出來在等什麼。
      */
     invalidateAnalysis()
+
+    /**
+     * **清完快取就立刻填回去。**
+     *
+     * `getStockPage` 走 service role、不含任何 per-user 內容，所以在這裡
+     * 直接呼叫一次就能把 `unstable_cache` 暖起來——不需要透過 HTTP，
+     * 那條路會被 middleware 導去登入頁。
+     *
+     * 為什麼值得：實測正式站的個股頁冷啟動 1,153～1,825ms，熱的 302～359ms。
+     * 抓取跑完會清掉快取，於是**每天的第一個訪客一定吃到那 1.5 秒**——
+     * 而那個訪客通常就是你。這裡多花幾秒，換掉每天第一次開站的等待。
+     *
+     * 失敗不影響抓取結果：暖快取是加分項，不是資料正確性的一部分。
+     */
+    let warmed = 0
+    try {
+      for (const s of await getWatchedSymbols()) {
+        await getStockPage(s.market, s.code)
+        warmed += 1
+      }
+    } catch {
+      // 暖不起來就算了，下一個訪客自己付那 1.5 秒
+    }
+
     const failed = results.filter((r) => !r.ok)
     const seconds = Math.round((Date.now() - started) / 100) / 10
     return NextResponse.json({
       ok: failed.length === 0,
       seconds,
       total: results.length,
+      warmed,
       failed: failed.map((r) => ({ code: r.code, error: r.error })),
       issues: results.flatMap((r) => r.issues ?? []),
     }, { status: failed.length === 0 ? 200 : 500 })

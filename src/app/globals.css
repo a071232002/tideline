@@ -1256,6 +1256,40 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* ---------------------------------------------- 導覽中的進度條
+ *
+ * 實測正式站的個股頁冷啟動 1,153～1,825ms。在那段時間裡畫面完全沒變，
+ * 使用者分不出「網站掛了」還是「只是慢」——而那兩者要做的事完全不同
+ * （重新整理 vs 等一下）。
+ *
+ * 固定在視窗頂端，所以不必盯著剛才點的位置。它是**不確定型**的：
+ * 我們不知道還要多久，一條卡在 80% 的假進度條比誠實的來回移動更糟。
+ */
+.navbar-progress {
+  position: fixed; inset: 0 auto auto 0; z-index: 50;
+  height: 3px; width: 100%;
+  background: linear-gradient(90deg,
+    transparent 0%, var(--blue) 35%, var(--blue) 65%, transparent 100%);
+  background-size: 40% 100%; background-repeat: no-repeat;
+  animation: navslide 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes navslide {
+  0%   { background-position: -40% 0; }
+  100% { background-position: 140% 0; }
+}
+/* 減少動態時不要動，但**還是要看得見**——把它變成一條靜止的實色細線。
+   直接拿掉的話就回到「完全沒有回饋」，那正是要修的問題。 */
+@media (prefers-reduced-motion: reduce) {
+  .navbar-progress {
+    animation: none; background: var(--blue); background-size: 100% 100%;
+  }
+}
+
+/* 點過的那一列淡下去：回來的時候知道剛才點的是哪一個。
+   只動不透明度，不動位置——版面在等待中跳動比不會動更糟。 */
+.rowlink:active ~ *, .row:has(.rowlink:active) { opacity: .55; }
+
 /* 沒有估值可講時的一行。ETF 永遠走這條——一句「這裡沒有東西」
    不值得一個帶邊框與陰影的容器（實測手機上 111px）。 */
 .valempty {

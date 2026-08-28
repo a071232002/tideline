@@ -234,7 +234,10 @@ export function WatchList({
               data-market={r.market}>
               <div>
                 {/* 連結包代號，::after 把可點範圍撐滿整列——觸控時不用瞄準那幾個字 */}
-                <NavLink className="rowlink rcode" href={`/${r.market.toLowerCase()}/${r.code}`}>
+                {/* 預取：清單上看得到的每一檔都先抓好，點下去就不用等
+                    （實測正式站冷啟動 1.5 秒，熱的 0.35 秒） */}
+                <NavLink className="rowlink rcode" prefetch
+                  href={`/${r.market.toLowerCase()}/${r.code}`}>
                   {r.code}
                 </NavLink>
                 {/* 市場用極小的灰字，不用有框的徽章——上面的篩選列已經在講市場，

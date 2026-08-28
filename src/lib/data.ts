@@ -294,6 +294,19 @@ export interface StockPage {
 }
 
 /**
+ * 有人在追蹤的標的。給抓取後暖快取用——不是給頁面用的，所以走 service role，
+ * 而且**不看是誰在追蹤**：`getStockPage` 的內容本來就全站共用。
+ */
+export async function getWatchedSymbols(): Promise<{ market: string; code: string }[]> {
+  const db = createAdminClient()
+  const { data: w } = await db.from('watchlist').select('symbol_id')
+  const ids = [...new Set((w ?? []).map((r) => r.symbol_id as string))]
+  if (ids.length === 0) return []
+  const { data } = await db.from('symbols').select('market, code').in('id', ids)
+  return (data ?? []).map((r) => ({ market: r.market as string, code: r.code as string }))
+}
+
+/**
  * 個股頁的所有資料。全站共用（不含使用者資訊），所以可以放進快取。
  * 用 service role 讀是因為這裡沒有任何 per-user 內容。
  */
