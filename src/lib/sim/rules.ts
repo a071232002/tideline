@@ -132,11 +132,32 @@ export function ruleDecider(
         + `減碼 ${Math.round(p.trimFraction * 100)}%`)
     }
 
-    // 3. 加碼：訊號要先架起來，價格與 %b 要到位，批次要有額度，且不在冷卻中
     const cooling = ctx.index <= cooldownUntilIndex
     const roomForBatch = state.cost + batchSize <= initialCash + 1e-9
 
-    if (
+    /**
+     * 2.5 底倉：空手的時候先把規劃好的那一份放進場，不等訊號。
+     *
+     * 現行規則從 100% 現金起手，於是「規劃給這一檔的錢」可能整段期間
+     * 都在場外——那跟沒有規劃它是同一件事。§4 的用詞是**加碼**與**減碼**，
+     * 兩個都是部位調整，而你沒辦法從零減碼。
+     *
+     * 止損之後照樣會重建（冷卻結束、shares 回到 0 就再進一次）——
+     * 那正是重點：這筆錢是分配給這一檔的，止損是調節，不是清倉離場。
+     *
+     * `coreFraction` 預設 0，也就是這一段預設不生效。
+     */
+    const coreCash = (p.coreFraction ?? 0) * initialCash
+    const wantCore = coreCash > 0 && !cooling && state.shares === 0
+      && state.cost < 1e-9 && state.cash >= coreCash
+
+    // 3. 加碼：訊號要先架起來，價格與 %b 要到位，批次要有額度，且不在冷卻中
+    if (wantCore) {
+      buyCash = coreCash
+      triggers.push('core')
+      reasons.push(`建立底倉 ${Math.round((p.coreFraction ?? 0) * 100)}%`
+        + '——這筆錢是規劃給這一檔的，其餘留給訊號調節')
+    } else if (
       !cooling
       && armed
       && bar.l <= day.levels.add.hi

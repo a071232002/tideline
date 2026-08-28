@@ -24,7 +24,8 @@
     "check:deploy": "tsx scripts/deploy-check.ts",
     "recommend": "tsx scripts/recommend.ts",
     "deploy:sql": "tsx scripts/deploy-sql.ts",
-    "experiment": "tsx scripts/experiment.ts"
+    "experiment": "tsx scripts/experiment.ts",
+    "experiment:core": "tsx scripts/experiment-core.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
