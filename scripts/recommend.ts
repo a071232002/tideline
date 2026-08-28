@@ -31,6 +31,7 @@ import { pickTop, type RankInput } from '../src/lib/ai/rank'
 import { taipeiToday } from '../src/lib/freshness'
 import { promisify } from 'node:util'
 import { execFile } from 'node:child_process'
+import { exitCleanly } from '../src/lib/exit'
 
 const run = promisify(execFile)
 const db = createAdminClient()
@@ -182,4 +183,4 @@ async function main() {
 }
 
 await main()
-process.exit(process.exitCode ?? 0)
+await exitCleanly(typeof process.exitCode === 'number' ? process.exitCode : 0)

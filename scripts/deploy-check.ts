@@ -21,6 +21,8 @@
  */
 import { createAdminClient } from '../src/lib/supabase/admin'
 import { taipeiToday } from '../src/lib/freshness'
+import { ingestOverdue, lastScheduledIngest } from '../src/lib/schedule'
+import { exitCleanly } from '../src/lib/exit'
 
 const db = createAdminClient()
 const today = taipeiToday()
@@ -48,8 +50,29 @@ const { data: runs } = await db.from('job_runs')
  */
 const dayStart = Date.parse(`${today}T00:00:00+08:00`)
 const todayRuns = (runs ?? []).filter((r) => Date.parse(r.started_at as string) >= dayStart)
+
+/**
+ * **「今天還沒有紀錄」不等於「沒跑」。**
+ *
+ * 排程一天兩次（07:30、14:30），所以從午夜到早上七點半這段時間裡，
+ * 「今天沒有抓取」是**正確而且正常**的狀態。舊版不分這個，於是每天
+ * 凌晨到早上都會喊一次——實測 2026-08-29 00:06 就喊了一次假警報。
+ *
+ * 這支腳本開頭那句「工具自己謊報比沒有工具更糟」講的就是這件事，
+ * 只是上次修的是時區，這次修的是時點。
+ */
+const lastOk = (runs ?? []).filter((r) => r.ok && r.finished_at)
+  .map((r) => Date.parse(r.finished_at as string)).sort((a, b) => b - a)[0]
+const due = ingestOverdue(new Date(), lastOk === undefined ? null : new Date(lastOk))
+const expectAt = new Date(lastScheduledIngest(new Date()).getTime() + 8 * 3600_000)
+  .toISOString().slice(5, 16).replace('T', ' ')
+
 if (todayRuns.length === 0) {
-  warn(`今天沒有任何抓取紀錄。cron 的時間是 UTC——台北 07:30 是「30 23」（前一天）`)
+  if (due.overdue) {
+    warn(`上一個排程時點是 ${expectAt}（台北），到現在還沒有成功的抓取紀錄`)
+  } else {
+    ok(`還沒到下一個排程時點（上一個是 ${expectAt} 台北，已經跑過了）`)
+  }
 } else {
   for (const r of todayRuns) {
     const secs = r.finished_at
@@ -124,9 +147,9 @@ for (const acc of aiAccs ?? []) {
 console.log('')
 if (problems.length === 0) {
   console.log('✓ 沒有發現問題')
-  process.exit(0)
+  await exitCleanly(0)
 }
 console.log(`⚠ ${problems.length} 件事要看：`)
 for (const p of problems) console.log(`  - ${p}`)
 // 這些多半不是「壞掉」而是「要注意」，所以不用非零離開碼嚇人
-process.exit(0)
+await exitCleanly(0)

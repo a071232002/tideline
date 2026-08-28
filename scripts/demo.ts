@@ -11,6 +11,7 @@ import { fetchTwseDailyBars } from '../src/lib/sources/twse'
 import { fetchYahooDailyBars } from '../src/lib/sources/yahoo'
 import { analyze } from '../src/lib/analyze'
 import type { Bar } from '../src/lib/types'
+import { exitCleanly } from '../src/lib/exit'
 
 interface Target {
   market: 'TW' | 'US'
@@ -125,7 +126,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error(e)
-  process.exit(1)
+  await exitCleanly(1)
 })

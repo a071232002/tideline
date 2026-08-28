@@ -18,6 +18,7 @@
  * 修好之前留下的。這支腳本看的是資料本身。
  */
 import { createAdminClient } from '../src/lib/supabase/admin'
+import { exitCleanly } from '../src/lib/exit'
 
 const db = createAdminClient()
 const problems: string[] = []
@@ -102,9 +103,9 @@ for (const n of names ?? []) {
 
 if (problems.length === 0) {
   console.log('✓ 資料乾淨：沒有測試資料混入、沒有孤兒分析、沒有殘股、沒有假決策')
-  process.exit(0)
+  await exitCleanly(0)
 }
 
 console.error(`✗ 找到 ${problems.length} 個問題：`)
 for (const p of problems) console.error(`  - ${p}`)
-process.exit(1)
+await exitCleanly(1)

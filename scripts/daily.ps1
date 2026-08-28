@@ -42,10 +42,58 @@ $env:DOCKER_HOST = 'npipe:////./pipe/podman-machine-default'
 New-Item -ItemType Directory -Force -Path (Join-Path $proj 'logs') | Out-Null
 Set-Location $proj
 
+# **不能用 Write-Output。**
+#
+# 它寫的是「管線」，而在函式裡呼叫的話那些行會變成**函式的回傳值**。
+# Invoke-Step 因此回傳「一整包 log 文字，最後才是離開碼」，
+# `(Invoke-Step …) -ne 0` 拿到的是一個陣列，永遠為真——每一步都被記成
+# 「沒有成功」，即使它剛剛才成功。用 [Console] 直接寫，繞開管線。
 function Write-Log($msg) {
   $line = '{0}  {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg
-  Write-Output $line
+  [Console]::Out.WriteLine($line)
   Add-Content -Path $log -Value $line -Encoding utf8
+}
+
+<#
+.SYNOPSIS
+  跑一段外部指令，把輸出寫進 log，回傳它的離開碼。
+
+.DESCRIPTION
+  **不要直接寫 `& npm run x 2>&1`。**
+
+  PowerShell 5.1 在 `2>&1` 之下會把原生指令 stderr 的每一行包成 ErrorRecord，
+  而這個檔案開頭是 `$ErrorActionPreference = 'Stop'`——於是任何一行 stderr
+  都會直接 throw，賦值不會發生，**真正的 stdout 整段被丟掉**。
+
+  實測 2026-08-28 14:35：推薦其實走的是正常的早退路徑（早上已經寫過六筆，
+  今天不用再問一次），只是收工時 Windows 的 libuv 吐了一行斷言。log 上留下的
+  卻是「推薦失敗：Assertion failed…」，而那句「已經有 6 筆推薦，跳過」不見了。
+  把成功記成失敗，還把證據刪掉。
+
+  更危險的是同樣的寫法出現在抓取那一步，而那一步**不在 try/catch 裡**：
+  npm 隨便一行 warning 就會讓整支腳本停在那裡，AI 與推薦都不會跑。
+
+  所以這裡把 `$ErrorActionPreference` 暫時放回 'Continue'，讓 stderr 只是
+  文字；成功與否一律看 `$LASTEXITCODE`，那才是唯一可信的訊號。
+#>
+function Invoke-Step {
+  param([string]$Name, [scriptblock]$Command)
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $out = & $Command 2>&1
+    $code = $LASTEXITCODE
+  } catch {
+    Write-Log ('X ' + $Name + ' 沒能啟動：' + $_)
+    return 1
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+  $out | ForEach-Object { Write-Log $_ }
+  if ($null -eq $code) { $code = 0 }
+  if ($code -ne 0) { Write-Log ('X ' + $Name + ' exit ' + $code) }
+  # 這個 return 必須是這個函式**唯一**流進管線的東西
+  return [int]$code
 }
 
 function Test-Supabase {
@@ -126,9 +174,7 @@ $code = 0
 if ($SkipIngest) {
   Write-Log '略過抓取（由 Vercel Cron 負責）'
 } else {
-  $out = & npm run ingest 2>&1
-  $code = $LASTEXITCODE
-  $out | ForEach-Object { Write-Log $_ }
+  $code = Invoke-Step '抓取' { npm run ingest }
 }
 
 # 4. AI 帳戶的每日決策（PLAN §13.5）。
@@ -139,12 +185,8 @@ if ($SkipIngest) {
 if ($code -eq 0) {
   Write-Log (& { if ($SkipIngest) { '--- 開始 AI 決策 ---' }
                  else { '--- 抓取完成，開始 AI 決策 ---' } })
-  try {
-    $ai = & npm run ai 2>&1
-    $ai | ForEach-Object { Write-Log $_ }
-    if ($LASTEXITCODE -ne 0) { Write-Log "AI 決策 exit $LASTEXITCODE（不影響抓取結果）" }
-  } catch {
-    Write-Log "AI 決策失敗：$_（不影響抓取結果）"
+  if ((Invoke-Step 'AI 決策' { npm run ai }) -ne 0) {
+    Write-Log 'AI 決策沒有成功（不影響抓取結果）'
   }
 }
 
@@ -157,12 +199,8 @@ if ($code -eq 0) {
 # 而且它是唯一「今天沒有也無所謂」的一段。
 if ($code -eq 0) {
   Write-Log '--- 開始挑選值得看一眼的標的 ---'
-  try {
-    $rec = & npm run recommend 2>&1
-    $rec | ForEach-Object { Write-Log $_ }
-    if ($LASTEXITCODE -ne 0) { Write-Log "推薦 exit $LASTEXITCODE（不影響抓取結果）" }
-  } catch {
-    Write-Log "推薦失敗：$_（不影響抓取結果）"
+  if ((Invoke-Step '推薦' { npm run recommend }) -ne 0) {
+    Write-Log '推薦沒有成功（不影響抓取結果）'
   }
 }
 

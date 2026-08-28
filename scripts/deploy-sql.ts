@@ -35,16 +35,17 @@
  */
 import { writeFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { createAdminClient } from '../src/lib/supabase/admin'
+import { exitCleanly } from '../src/lib/exit'
 
 const db = createAdminClient()
 const OUT = 'deploy'
 
-const email = (() => {
+const email = await (async () => {
   const i = process.argv.indexOf('--user')
   if (i < 0 || !process.argv[i + 1]) {
     console.error('用法：npm run deploy:sql -- --user you@example.com')
     console.error('（新專案裡要用哪個帳號，就填那個 email）')
-    process.exit(1)
+    await exitCleanly(1)
   }
   return process.argv[i + 1]!
 })()
@@ -94,7 +95,8 @@ const { data: users } = await db.auth.admin.listUsers()
 const me = users.users.find((u) => u.email === email)
 if (!me) {
   console.error(`✗ 本機找不到 ${email}。現有：${users.users.map((u) => u.email).join('、')}`)
-  process.exit(1)
+  await exitCleanly(1)
+  throw new Error('unreachable')   // await 之後 TS 不再把 exitCleanly 的 never 拿來收斂型別
 }
 
 const pick = async (table: string, cols: string, filter?: (q: never) => never) => {
@@ -158,4 +160,4 @@ console.log(`    symbols ${symbols.length}・fx_rates ${fx.length}・daily_analy
 console.log(`    watchlist ${watchlist.length}・sim_accounts ${accounts.length}`
   + `・sim_ai_log ${aiLog.length}・recommendations ${recs.length}`)
 console.log(`    使用者：${email}`)
-process.exit(0)
+await exitCleanly(0)

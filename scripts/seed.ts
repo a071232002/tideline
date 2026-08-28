@@ -3,6 +3,7 @@
  * 只在本機用，不進版（supabase/seed.sql 與這支都在 .gitignore 的精神下）。
  */
 import { createAdminClient } from '../src/lib/supabase/admin'
+import { exitCleanly } from '../src/lib/exit'
 
 // 本機開發帳號。第二個只是用來驗 RLS（兩個帳號才看得出互相看不到）。
 const USERS = [
@@ -50,4 +51,4 @@ async function main() {
   for (const u of USERS) console.log(`  ${u.email} / ${u.password}`)
 }
 
-main().catch((e) => { console.error(e); process.exit(1) })
+main().catch(async (e) => { console.error(e); await exitCleanly(1) })

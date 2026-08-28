@@ -22,8 +22,10 @@ import { createAdminClient } from '../src/lib/supabase/admin'
 import { rebuildAll } from '../src/lib/sim/run'
 import { waitForIngestToFinish, waitForFreshIngest } from '../src/lib/jobs'
 import { taipeiToday } from '../src/lib/freshness'
+import { freshSince } from '../src/lib/schedule'
 import { buildPrompt, allowedNumbers, type AiFacts } from '../src/lib/ai/prompt'
 import { parseDecision } from '../src/lib/ai/decide'
+import { exitCleanly } from '../src/lib/exit'
 
 const run = promisify(execFile)
 
@@ -100,9 +102,17 @@ async function main() {
    * `TIDELINE_AI_NO_WAIT=1` 可以跳過等待。給手動除錯用，正式排程不要設。
    */
   if (process.env.TIDELINE_AI_NO_WAIT !== '1') {
-    // 「夠新」的界線：今天台北 00:00。台股的 14:30 那一輪與美股的 07:30
-    // 那一輪都落在同一個台北日期裡，所以一條線就夠。
-    const since = new Date(`${taipeiToday()}T00:00:00+08:00`)
+    /**
+      * 「夠新」的界線是**上一個排程時點**，不是今天午夜。
+      *
+      * 原本寫的是今天台北 00:00，那讓下午那輪形同虛設：14:35 的 AI 只要
+      * 看到早上 07:58 那輪就放行——而早上台股還沒收盤，最新 K 棒是昨天的。
+      * 於是每一檔都「已有紀錄」跳過，**當天的台股判斷整天不會產生**，
+      * 而 log 從頭到尾看起來完全正常。
+      *
+      * 那正是這支腳本上一次踩的坑（Cron 遲到 23 分鐘）換了個時段重演。
+      */
+     const since = freshSince(new Date())
     const fresh = await waitForFreshIngest({
       since,
       fetchRows: async () => {
@@ -323,4 +333,4 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1) })
+main().catch(async (e) => { console.error(e); await exitCleanly(1) })
