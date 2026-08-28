@@ -1286,6 +1286,30 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
   }
 }
 
+/* 資料自己更新之後說一聲。
+   數字無聲無息地變了，讀起來像故障——尤其是報酬率。停幾秒就夠，
+   它不是要人去讀，是要人**不要以為畫面壞了**。
+   放右下角：左上是進度條，中間是內容，右下是這一頁最不會擋到東西的角落。 */
+.freshtoast {
+  position: fixed; inset: auto var(--sp-8) var(--sp-8) auto; z-index: 60;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: var(--sp-5) var(--sp-8);
+  font-size: var(--t-micro); font-weight: 650;
+  -webkit-text-stroke: var(--stroke-fix) currentColor;
+  box-shadow: var(--shadow);
+  animation: freshin var(--mo-slow) var(--mo-ease);
+  pointer-events: none;
+}
+@keyframes freshin {
+  from { opacity: 0; transform: translateY(var(--sp-4)); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 淡入拿掉，但東西還是要在——它本身就是那個訊息 */
+  .freshtoast { animation: none; }
+}
+
 /* 點過的那一列淡下去：回來的時候知道剛才點的是哪一個。
    只動不透明度，不動位置——版面在等待中跳動比不會動更糟。 */
 .rowlink:active ~ *, .row:has(.rowlink:active) { opacity: .55; }

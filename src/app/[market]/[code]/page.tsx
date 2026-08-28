@@ -7,6 +7,7 @@ import { LevelStrip, type StripLevel } from '@/components/LevelStrip'
 import { levelStatus } from '@/lib/status'
 import { Icon } from '@/components/Icon'
 import { TopBar } from '@/components/TopBar'
+import { FreshWatch } from '@/components/FreshWatch'
 import { ValuationCard } from '@/components/ValuationCard'
 import { SimCard } from '@/components/SimCard'
 import { SimNext } from '@/components/SimNext'
@@ -110,6 +111,7 @@ export default async function StockPage({
 
   return (
     <main className="wrap">
+      <FreshWatch />
       <TopBar />
       <NavLink href="/" className="backlink"><Icon name="back" /><span>觀察清單</span></NavLink>
 

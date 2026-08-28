@@ -42,6 +42,16 @@ export async function middleware(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + '/'))
 
   if (!signedIn && !isPublic) {
+    /**
+     * **API 要回 401，不要導去登入頁。**
+     *
+     * 轉址對瀏覽器的網址列是對的，對 `fetch()` 是災難：它會默默跟著跳，
+     * 拿回一頁 200 的 HTML，然後呼叫端 `res.json()` 炸在 `<!DOCTYPE`。
+     * 而真正發生的事情（沒登入）在那個錯誤訊息裡完全看不出來。
+     */
+    if (path.startsWith('/api/')) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('next', path)

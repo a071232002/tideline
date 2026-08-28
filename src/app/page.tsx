@@ -2,6 +2,7 @@ import { getWatchlist, getFreshness, getRecommendations } from '@/lib/data'
 import { AddSymbolForm } from '@/components/AddSymbolForm'
 import { WatchList } from '@/components/WatchList'
 import { TopBar } from '@/components/TopBar'
+import { FreshWatch } from '@/components/FreshWatch'
 import { Discover } from '@/components/Discover'
 import { removeSymbol, addFromDiscover } from './actions'
 
@@ -14,6 +15,8 @@ export default async function HomePage() {
 
   return (
     <main className="wrap">
+      {/* 排程跑完就自己更新畫面。分頁開著過夜的人不會知道該按重新整理 */}
+      <FreshWatch />
       <TopBar fresh={fresh} />
 
       {/* 標題就是標題。「每日技術分析」「收盤後更新」「指標由程式計算」
