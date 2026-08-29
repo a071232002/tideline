@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { getStockPage, getSim } from '@/lib/data'
+import { getStockPage, getSim, getFreshness } from '@/lib/data'
 import { ChartBoard } from '@/components/ChartBoard'
 import { gapSeries } from '@/components/GapPanel'
 import { NavLink } from '@/components/NavLink'
@@ -38,8 +38,9 @@ export default async function StockPage({
   const page = await getStockPage(market.toUpperCase(), code.toUpperCase())
   if (!page) notFound()
 
-  // 模擬帳戶是 per-user 的，所以在共用快取之外單獨讀（PLAN §13.7）
-  const sim = await getSim(page.symbol.id)
+  // 模擬帳戶是 per-user 的，所以在共用快取之外單獨讀（PLAN §13.7）。
+  // 新鮮度跟它一起平行讀——兩者互不相干，排隊只是把延遲加起來。
+  const [sim, fresh] = await Promise.all([getSim(page.symbol.id), getFreshness()])
   const simLead = sim.find((t) => t.track === 'ai' && t.trades > 0)
     ?? sim.find((t) => t.track === 'rule')
   // 與「買了不動」的差距，當成主圖的一個圖層。回顧不再是另一頁。
@@ -112,7 +113,10 @@ export default async function StockPage({
   return (
     <main className="wrap">
       <FreshWatch />
-      <TopBar />
+      {/* **個股頁原本沒有帶 fresh。** 點進來之後判斷新舊的線索全部消失，
+          只剩標題下面一句沒有脈絡的「資料日期 2026-08-28」——而這一頁
+          停留的時間比清單頁長得多。 */}
+      <TopBar fresh={fresh} />
       <NavLink href="/" className="backlink"><Icon name="back" /><span>觀察清單</span></NavLink>
 
       <header className="pagehead">

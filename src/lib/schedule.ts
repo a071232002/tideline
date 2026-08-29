@@ -98,3 +98,36 @@ export function ingestOverdue(
     && lastFinishedAt.getTime() >= expectedAt.getTime() - SCHEDULE_SLACK_MS
   return { overdue: !covered, expectedAt }
 }
+
+/**
+ * 現在之後最近的一個排程時點。
+ *
+ * **剛好卡在時點上算下一個。** 14:30:00 那一秒還顯示「下次 14:30」，
+ * 讀起來像那件事還沒發生。
+ */
+export function nextScheduledIngest(now: Date): Date {
+  const { dayStartMs, msIntoDay } = taipeiParts(now)
+  const offsets = INGEST_TIMES.map(hhmmToMs).sort((a, b) => a - b)
+  const upcoming = offsets.filter((o) => o > msIntoDay)
+  if (upcoming.length > 0) return new Date(dayStartMs + upcoming[0]!)
+  return new Date(dayStartMs + 86_400_000 + offsets[0]!)
+}
+
+/**
+ * 「多久以前」。
+ *
+ * 「06:29」回答不了「這是新的還舊的」，「3 小時前」可以——那是整個新鮮度
+ * 顯示裡最重要的一句話。
+ *
+ * **無條件捨去。** 3 小時 50 分講「3 小時前」，不是「4 小時前」——
+ * 把資料說得比實際更舊，使用者會據此不相信畫面上的數字。負數當作剛剛：
+ * 伺服器與瀏覽器的時鐘會差幾秒，不該因此印出「-1 分鐘前」。
+ */
+export function agoText(ms: number): string {
+  if (ms < 60_000) return '剛剛'
+  const mins = Math.floor(ms / 60_000)
+  if (mins < 60) return `${mins} 分鐘前`
+  const hours = Math.floor(ms / 3600_000)
+  if (hours < 24) return `${hours} 小時前`
+  return `${Math.floor(ms / 86_400_000)} 天前`
+}

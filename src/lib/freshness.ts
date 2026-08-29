@@ -72,6 +72,14 @@ export interface MarketFreshness extends Freshness {
   /** 我們**什麼時候抓的**（台北時間 MM-DD HH:mm）。與收盤日是兩件事：
       收盤日說「這是哪一場交易」，抓取時間說「這份資料多新」。 */
   fetchedAt: string | null
+  /**
+   * 同一個時間，但沒有格式化過。
+   *
+   * 「3 小時前」必須在 client 算——在伺服器算會被 `unstable_cache` 連同頁面
+   * 凍住，畫面上會有一個永遠停在「3 小時前」的相對時間。假的新鮮度指標
+   * 比沒有更糟：沒有的時候人會去別處確認，有的時候人會相信它。
+   */
+  fetchedAtIso: string | null
 }
 
 /**
@@ -117,10 +125,11 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
   const ranToday = lastOkAt !== null && taipeiToday(new Date(lastOkAt)) === today
 
   const fetchedAt = lastOkAt ? shortTime(lastOkAt) : null
+  const fetchedAtIso = lastOkAt
 
   if (!ranToday) {
     return {
-      market, label, barDate: latestBarDate, fetchedAt, kind: 'stale', tone: 'warn',
+      market, label, barDate: latestBarDate, fetchedAt, fetchedAtIso, kind: 'stale', tone: 'warn',
       // 時間不寫在這裡——頁首另有一個抓取時間的欄位，寫三次是雜訊
       message: `${label}未更新`,
     }
@@ -129,7 +138,7 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
   const expected = expectedBarDate(market, today)
   if (latestBarDate === expected) {
     return {
-      market, label, barDate: latestBarDate, fetchedAt, kind: 'fresh', tone: 'none',
+      market, label, barDate: latestBarDate, fetchedAt, fetchedAtIso, kind: 'fresh', tone: 'none',
       message: `${label} ${latestBarDate} 收盤`,
     }
   }
@@ -138,7 +147,7 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
   // 是排程排在收盤之前。混進「休市」的話，交易日會被說成假日。
   if (lastOkAt !== null && taipeiMinuteOfDay(lastOkAt) < CLOSE_MINUTE[market]) {
     return {
-      market, label, barDate: latestBarDate, fetchedAt, kind: 'pending', tone: 'muted',
+      market, label, barDate: latestBarDate, fetchedAt, fetchedAtIso, kind: 'pending', tone: 'muted',
       message: latestBarDate
         ? `${label}尚未收盤，為 ${latestBarDate} 收盤`
         : `${label}尚未收盤`,
@@ -146,7 +155,7 @@ export function marketFreshness(market: Market, input: FreshnessInput): MarketFr
   }
 
   return {
-    market, label, barDate: latestBarDate, fetchedAt, kind: 'holiday', tone: 'muted',
+    market, label, barDate: latestBarDate, fetchedAt, fetchedAtIso, kind: 'holiday', tone: 'muted',
     message: latestBarDate
       ? `${label}休市，為 ${latestBarDate} 收盤`
       : `${label}尚無資料`,

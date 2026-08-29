@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  INGEST_TIMES, lastScheduledIngest, freshSince, ingestOverdue,
-  SCHEDULE_SLACK_MS,
+  INGEST_TIMES, lastScheduledIngest, nextScheduledIngest, freshSince, ingestOverdue,
+  SCHEDULE_SLACK_MS, agoText,
 } from '../src/lib/schedule'
 
 /**
@@ -96,5 +96,56 @@ describe('健檢該不該喊「沒跑」', () => {
   it('早跑兩分鐘的那一輪要算數', () => {
     // 14:28 開始、14:29 結束，而時點是 14:30
     expect(at('2026-08-29T16:00:00', '2026-08-29T14:29:00')).toBe(false)
+  })
+})
+
+describe('下一個排程時點', () => {
+  it('早上那輪之後 → 下一個是今天 14:30', () => {
+    expect(nextScheduledIngest(tp('2026-08-29T07:40:00')).toISOString())
+      .toBe(tp('2026-08-29T14:30:00').toISOString())
+  })
+
+  it('下午那輪之後 → 下一個是明天 07:30', () => {
+    expect(nextScheduledIngest(tp('2026-08-29T14:40:00')).toISOString())
+      .toBe(tp('2026-08-30T07:30:00').toISOString())
+  })
+
+  it('半夜 → 下一個是今天早上', () => {
+    expect(nextScheduledIngest(tp('2026-08-29T00:06:00')).toISOString())
+      .toBe(tp('2026-08-29T07:30:00').toISOString())
+  })
+
+  it('剛好卡在時點上算下一個，不是這一個', () => {
+    // 14:30:00 那一秒，「下次」不該還顯示 14:30——那句話讀起來像還沒發生
+    expect(nextScheduledIngest(tp('2026-08-29T14:30:00')).toISOString())
+      .toBe(tp('2026-08-30T07:30:00').toISOString())
+  })
+})
+
+describe('agoText', () => {
+  /**
+   * 「06:29」回答不了「這是新的還舊的」，「3 小時前」可以。
+   * 這是整個新鮮度顯示裡最重要的一句話。
+   */
+  it('一分鐘內講「剛剛」——「0 分鐘前」很怪', () => {
+    expect(agoText(30_000)).toBe('剛剛')
+  })
+
+  it('分鐘', () => {
+    expect(agoText(12 * 60_000)).toBe('12 分鐘前')
+  })
+
+  it('小時（無條件捨去，不要四捨五入到未來）', () => {
+    // 3 小時 50 分要講「3 小時前」。講「4 小時前」是把資料說得比實際更舊，
+    // 而使用者會據此判斷要不要相信畫面上的數字。
+    expect(agoText(3 * 3600_000 + 50 * 60_000)).toBe('3 小時前')
+  })
+
+  it('天', () => {
+    expect(agoText(50 * 3600_000)).toBe('2 天前')
+  })
+
+  it('**負數當作剛剛**——時鐘偏移不該印出「-1 分鐘前」', () => {
+    expect(agoText(-5000)).toBe('剛剛')
   })
 })

@@ -2,6 +2,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { SubmitButton } from './SubmitButton'
 import { NavLink } from './NavLink'
 import { Icon } from './Icon'
+import { FreshClock } from './FreshClock'
 import type { MarketFreshness } from '@/lib/freshness'
 
 /**
@@ -38,12 +39,13 @@ export function TopBar({ fresh }: { fresh?: MarketFreshness[] }) {
             </span>
           ))}
           {/* 收盤日與抓取時間是兩件事：前者說「這是哪一場交易」，
-              後者說「這份資料多新」。只給日期看不出後者。 */}
-          {fresh[0]?.fetchedAt && (
-            <span className="fetchedat" data-testid="fetched-at">
-              {fresh[0].fetchedAt}
-            </span>
-          )}
+              後者說「這份資料多新」。只給日期看不出後者。
+
+              **原本這裡是一個裸的「08-29 06:29」**，旁邊剛好都是日期，
+              很容易被讀成第三個資料日期；而且它回答不了「這是新的還舊的」
+              ——那要的是相對時間，以及「下次什麼時候」。
+              兩者都跟「現在幾點」有關，所以交給 client 算（見 FreshClock）。 */}
+          <FreshClock fetchedAtIso={fresh[0]?.fetchedAtIso ?? null} />
         </span>
       )}
 

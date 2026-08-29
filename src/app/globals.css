@@ -899,12 +899,21 @@ a { color: inherit; }
 
 .freshgroup { display: inline-flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
-.fetchedat {
+/* 抓取時間、下次時間、以及延遲。
+   `--faint` 只給正常狀態——延遲的時候要能被掃到，所以升到 --ink2 並加色。 */
+.freshclock {
   font-size: var(--t-micro);
   color: var(--faint);
   letter-spacing: .02em;
   padding-left: 10px;
   border-left: 1px solid var(--line);
+}
+/* 延遲是異常，手機上也要顯示（`.wide-only` 只掛在正常那一版），
+   而且要看得出來——正常那行是背景資訊，這行是答案。 */
+.freshclock.late {
+  color: var(--warn-ink, var(--ink2));
+  font-weight: 650;
+  -webkit-text-stroke: var(--stroke-fix) currentColor;
 }
 
 /* 估值：刻意做得比關鍵價位安靜——它是參考，不是今天要做的決定 */
