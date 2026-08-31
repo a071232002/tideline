@@ -1459,6 +1459,9 @@ main > .simnext { margin: 0 0 14px; background: var(--card); }
 /* 股數與參考價：跟指令同一行、同一階——沒有它們，指令還是不能照做 */
 .simnextqty { font-size: var(--t-lead); font-weight: 800; color: var(--ink); }
 .simnextref { font-size: var(--t-micro); font-weight: 400; color: var(--muted); }
+/* 同一天要掛兩張單時（買、賣限價不同）才出現。沒有這個標籤，兩行股數
+   長得一模一樣，讀者分不出哪一行是買哪一行是賣。 */
+.simnextleg { margin-right: .35em; color: var(--fg); }
 
 /* ------------------------------------------------------------ 回顧頁
  *

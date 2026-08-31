@@ -32,9 +32,18 @@ import { Icon } from './Icon'
  * **訊號是第 i 天收盤、資訊到齊之後才產生的**（engine.ts 開頭那一行），
  * 單已經下了，「明天」講的只是這張單什麼時候成交。
  *
- * 而成交必須排在下一個開盤，因為用當天收盤成交等於「跌破的瞬間就跑掉了」，
+ * 而成交必須排在下一個交易日，因為用當天收盤成交等於「跌破的瞬間就跑掉了」，
  * 那個價格在決定之前就已經印出來了。所以先說哪一天決定了什麼，
  * 再把成交時點當作機械後果附在後面。
+ *
+ * ## 兩種單要分得出來
+ *
+ * 加碼與減碼是**限價單**，掛在加碼區上緣／賣出區下緣，沒回到就不成交；
+ * 底倉與止損是**開盤市價單**。同一句「明天買進」底下是兩件不同的事，
+ * 所以價位那一行分開講（`howText`）——限價寫掛單價（那是要在券商輸入的
+ * 數字，不是估的），市價只能用今日收盤估，並且要標明是估的。
+ *
+ * 限價不同的買賣單不相抵，那天要掛兩張，所以 `estimates` 是陣列。
  */
 
 function verb(p: NonNullable<SimTrack['pending']>): string {
@@ -47,6 +56,8 @@ function verb(p: NonNullable<SimTrack['pending']>): string {
   return '買進'
 }
 
+type Leg = NonNullable<NonNullable<SimTrack['pending']>['estimates']>[number]
+
 /**
  * 這張單怎麼送。**限價與市價要分得出來**——同一句「明天買進」，一個是
  * 「掛 96.80，沒回到就不買」，另一個是「開盤多少買多少」，那是兩件事。
@@ -54,8 +65,6 @@ function verb(p: NonNullable<SimTrack['pending']>): string {
  * 市價單的數量只能用今日收盤估，所以要標明是估的；限價單的價位不是估的，
  * 是明天真的要輸入的數字，估的只有股數（成交價已經鎖住了，數量還受現金影響）。
  */
-type Leg = NonNullable<NonNullable<SimTrack['pending']>['estimates']>[number]
-
 function howText(e: Leg): string {
   return e.limit === null
     ? `以今日收盤 ${e.refPrice.toFixed(2)} 估`
