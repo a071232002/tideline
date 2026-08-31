@@ -11,7 +11,7 @@ import { affordableQty, buyFee, isDust, roundQty, sellCost } from './fees'
  *
  * ## 這個檔案裡最重要的一行
  *
- *   **訊號在第 i 天收盤後產生，成交在第 i+1 天的開盤價。**
+ *   **訊號在第 i 天收盤後產生，成交在第 i+1 天。**
  *
  * 用第 i 天的收盤價成交是紙上交易最容易造假的一點，而且造假不會有任何錯誤訊息。
  * 我們的訊號是收盤後才算出來的（§7：台北 09:30 前才看得到），
@@ -19,7 +19,25 @@ import { affordableQty, buyFee, isDust, roundQty, sellCost } from './fees'
  * 「跌破的瞬間就跑掉了」，實際上你隔天開盤才跑得掉，而跌破後的隔天常常跳空低開。
  *
  * 代價是最後一天的訊號還沒成交，留在 `pending`。那不是缺點，
- * 那正好就是頁面上要顯示的「**明天開盤將執行**」——一句可以照做的指令。
+ * 那正好就是頁面上要顯示的「**明天要送的單**」——一句可以照做的指令。
+ *
+ * ## 隔天怎麼成交：市價 vs 限價
+ *
+ * 訂單可以帶 `buyLimit` / `sellLimit`。**帶了就是限價單，沒帶就是開盤市價單。**
+ *
+ * 這一條是修一個對不起來的地方，不是加功能。規則軌的加碼與減碼觸發的是
+ * **盤中價位**——「今日最低進了加碼區」、「今日最高碰到賣出區」——但成交
+ * 一律排在次日開盤，於是那個觸發它的價位從來沒有真的成交過。碰到加碼區
+ * 之後彈回去就買在加碼區上方，碰到賣出區之後回落就賣在賣出區下方，
+ * **兩邊都往不利的方向偏，而且不會有任何錯誤訊息。**
+ *
+ * 真人拿到「明天回到 96.80 買進」這句話，會去券商掛一張 96.80 的限價單，
+ * 不會用市價追。限價是**今天就決定的**，所以沒有偷看未來——這是它跟
+ * 「用當日收盤成交」的分界。沒碰到就不成交，那張單當天過期；訊號如果
+ * 還成立，隔天的 decider 會再送一次。
+ *
+ * 哪些單不掛限價，見 `rules.ts`：止損（要跑就跑，不跟市場討價還價）、
+ * 底倉（配置決定，不是價格決定）、AI（它沒有欄位可以填價格，§13.5）。
  *
  * ## 一天之內的順序
  *
@@ -47,6 +65,14 @@ export interface Order {
   buyCash?: number
   /** 想賣掉的持股比例，0..1 */
   sellFraction?: number
+  /**
+   * 買進的限價。給了就是「明天掛這個價位」：開盤已經在它之下就用開盤價
+   * （撿到更好的），否則要盤中最低碰到才成交，沒碰到就當天過期。
+   * 不給就是開盤市價。
+   */
+  buyLimit?: number
+  /** 賣出的限價。規則同上，方向相反（開盤高於它就用開盤價，否則等最高碰到） */
+  sellLimit?: number
   triggers: string[]
   reason?: string
   decidedBy: 'rule' | 'ai'
@@ -113,18 +139,21 @@ export interface EquityPoint {
 }
 
 /**
- * 明日開盤大概會成交多少。
+ * 明天要送出的一張單。
  *
- * 明天的開盤價當然不知道，所以用**今日收盤**當參考價。給估算不是為了精確，
- * 是為了讓這一行真的能照做：「明日開盤買進一批」沒有股數也沒有價位，
- * 讀完還是不知道要在券商輸入什麼。
+ * 給數字不是為了精確，是為了讓這一行真的能照做：「明日買進一批」沒有股數
+ * 也沒有價位，讀完還是不知道要在券商輸入什麼。
  *
- * 標明是估算就好；假裝精確更糟，但完全不給數字等於這一行沒有用。
+ * 限價單的 `refPrice` 就是限價本身——那不是估的，是明天真的要輸入的數字。
+ * 市價單只能用**今日收盤**當參考價，明天的開盤不會剛好等於它，所以要標明
+ * 是估算。假裝精確更糟，但完全不給數字等於這一行沒有用。
  */
 export interface PendingEstimate {
   side: 'buy' | 'sell'
-  /** 參考價＝今日收盤。明天的開盤價不會剛好等於它 */
+  /** 限價單＝限價（照著輸入就對了）；市價單＝今日收盤（只是估） */
   refPrice: number
+  /** 掛單價。市價單是 null——沒有價位可以輸入，就是開盤有什麼吃什麼 */
+  limit: number | null
   qty: number
   amount: number
 }
@@ -132,8 +161,13 @@ export interface PendingEstimate {
 export interface PendingOrder {
   signalD: string
   order: Order
-  /** 不動作、或算出來連一股都買不到時是 null——不要生一個 0 出來 */
-  estimate: PendingEstimate | null
+  /**
+   * 明天要送的單。不動作、或算出來連一股都買不到時是空陣列——不要生一個 0 出來。
+   *
+   * 是陣列而不是單一物件，因為**限價不同的買單與賣單會各自成交**，
+   * 那是兩張單不是一張。只有兩邊價格相同時才會相抵成一筆（見 `fill`）。
+   */
+  estimates: PendingEstimate[]
 }
 
 export interface SimResult {
@@ -185,10 +219,9 @@ export function simulate(bars: readonly Bar[], decide: Decider, cfg: SimConfig):
       }
     }
 
-    // 2. 成交昨天的訂單，成交價 = 今天的開盤
+    // 2. 成交昨天的訂單。市價用今天的開盤，限價要今天碰得到才成交
     if (pending) {
-      const t = fill(pending, bar, state, cfg)
-      if (t) {
+      for (const t of fill(pending, bar, state, cfg)) {
         trades.push(t)
         totalFees += t.fee + t.tax
       }
@@ -198,7 +231,7 @@ export function simulate(bars: readonly Bar[], decide: Decider, cfg: SimConfig):
     // 3. 今天的訊號，留到明天成交
     const order = decide({ index: i, bar, state })
     if (order) {
-      pending = { signalD: bar.date, order, estimate: estimateFill(order, bar.c, state, cfg) }
+      pending = { signalD: bar.date, order, estimates: estimateFill(order, bar.c, state, cfg) }
     }
 
     // 4. 收盤結算
@@ -219,59 +252,115 @@ export function simulate(bars: readonly Bar[], decide: Decider, cfg: SimConfig):
 }
 
 /**
- * 把一張訂單變成最多一筆成交。
+ * 買進這一腿今天成交在哪個價位，`null` 代表今天沒成交。
  *
- * **買賣相抵**：兩張單都在同一個開盤價成交，分開送等於用同一個價格買進又賣出，
- * 白付兩趟手續費（台股還多撞一次最低 20 元）。真實世界沒有人會這樣做。
+ * 沒有限價就是開盤市價。有限價的話：開盤已經在限價之下，就用開盤價成交
+ * ——真實的限價單就是這樣，掛 97 而開在 95，你拿到的是 95 不是 97。
+ * 否則要盤中最低碰到限價才成交。都沒有的話這張單當天過期，**不留到後天**：
+ * 留著等於用今天的訊號吃後天的行情，而後天的訊號自己會再算一次。
+ */
+function buyPriceOn(bar: Bar, limit: number | undefined): number | null {
+  if (!(bar.o > 0)) return null
+  if (limit === undefined) return bar.o
+  if (bar.o <= limit) return bar.o
+  return bar.l <= limit ? limit : null
+}
+
+/** 賣出這一腿的成交價。規則同 `buyPriceOn`，方向相反 */
+function sellPriceOn(bar: Bar, limit: number | undefined): number | null {
+  if (!(bar.o > 0)) return null
+  if (limit === undefined) return bar.o
+  if (bar.o >= limit) return bar.o
+  return bar.h >= limit ? limit : null
+}
+
+/**
+ * 把一張訂單變成成交——**最多兩筆**。
  *
- * 買的數量只用**手上現有的現金**算，不預支同日賣出的價款——相抵之後那筆賣出
- * 根本沒有發生，價款也就不存在。
+ * **同價才相抵。** 兩腿都是市價時它們成交在同一個開盤價，分開送等於用同一個
+ * 價格買進又賣出，白付兩趟手續費（台股還多撞一次最低 20 元）。真實世界沒有
+ * 人會這樣做，所以相抵成一筆。
+ *
+ * **但限價不同就不能相抵。** 賣出區永遠在加碼區上方，所以那是「低點買進、
+ * 高點賣出」兩張各自成交的單——相抵掉會把真實發生的價差抹平，帳戶少賺的那
+ * 一段不會有任何痕跡。原本的相抵註解講的是「同一個開盤價」，條件本來就在
+ * 價格上，只是以前所有單都是市價，看不出來。
+ *
+ * 買的數量一律用**成交前**手上的現金算，不預支同日賣出的價款：相抵的情況下
+ * 那筆賣出根本沒發生，拆開的情況下台股 T+2 也還沒入帳。
  */
 function fill(
   p: PendingOrder, bar: Bar, state: AccountState, cfg: SimConfig,
-): Trade | null {
-  const { market, isEtf, fees } = cfg
-  const price = bar.o
-  if (!(price > 0)) return null
-
+): Trade[] {
+  const { market, fees } = cfg
   const o = p.order
 
-  const wantBuy = o.buyCash && o.buyCash > 0
-    ? affordableQty(market, Math.min(o.buyCash, state.cash), price, fees)
-    : 0
-  const wantSell = o.sellFraction && o.sellFraction > 0
-    ? Math.min(roundQty(market, state.shares * o.sellFraction), state.shares)
-    : 0
-
-  const net = wantBuy - wantSell
-  if (net === 0) return null
+  const buyPrice = (o.buyCash ?? 0) > 0 ? buyPriceOn(bar, o.buyLimit) : null
+  const sellPrice = (o.sellFraction ?? 0) > 0 ? sellPriceOn(bar, o.sellLimit) : null
+  if (buyPrice === null && sellPrice === null) return []
 
   const base = {
     signalD: p.signalD,
     fillD: bar.date,
-    price,
     triggers: o.triggers,
     reason: o.reason,
     decidedBy: o.decidedBy,
     confidence: o.confidence,
     overrodeStop: o.overrodeStop ?? false,
   }
+  // 兩條路徑都要用成交前的持股算，所以先算好
+  const sellQty =
+    Math.min(roundQty(market, state.shares * (o.sellFraction ?? 0)), state.shares)
 
-  if (net > 0) {
-    const qty = net
-    const gross = qty * price
-    const fee = buyFee(market, gross, fees)
-    if (gross + fee > state.cash + 1e-9) return null
-    state.cash -= gross + fee
-    state.shares += qty
-    state.cost += gross + fee
-    return { ...base, side: 'buy', qty, fee, tax: 0, costBasis: null }
+  if (buyPrice !== null && sellPrice !== null && buyPrice === sellPrice) {
+    const price = buyPrice
+    const wantBuy = affordableQty(market, Math.min(o.buyCash!, state.cash), price, fees)
+    const net = wantBuy - sellQty
+    if (net === 0) return []
+    const t = net > 0
+      ? doBuy(base, net, price, state, cfg)
+      : doSell(base, -net, price, state, cfg)
+    return t ? [t] : []
   }
 
-  const qty = Math.min(-net, state.shares)
+  const out: Trade[] = []
+  const cashBefore = state.cash
+  // 先賣後買，但買的額度用 cashBefore 卡住——順序只是為了讓賣出的股數
+  // 用到成交前的持股，不是為了讓買進動到賣出的價款
+  if (sellPrice !== null) {
+    const t = doSell(base, sellQty, sellPrice, state, cfg)
+    if (t) out.push(t)
+  }
+  if (buyPrice !== null) {
+    const qty = affordableQty(market, Math.min(o.buyCash!, cashBefore), buyPrice, fees)
+    const t = doBuy(base, qty, buyPrice, state, cfg)
+    if (t) out.push(t)
+  }
+  return out
+}
+
+type TradeBase = Omit<Trade, 'side' | 'qty' | 'price' | 'fee' | 'tax' | 'costBasis'>
+
+function doBuy(
+  base: TradeBase, qty: number, price: number, state: AccountState, cfg: SimConfig,
+): Trade | null {
   if (qty <= 0) return null
   const gross = qty * price
-  const { fee, tax } = sellCost(market, gross, isEtf, fees)
+  const fee = buyFee(cfg.market, gross, cfg.fees)
+  if (gross + fee > state.cash + 1e-9) return null
+  state.cash -= gross + fee
+  state.shares += qty
+  state.cost += gross + fee
+  return { ...base, side: 'buy', qty, price, fee, tax: 0, costBasis: null }
+}
+
+function doSell(
+  base: TradeBase, want: number, price: number, state: AccountState, cfg: SimConfig,
+): Trade | null {
+  const qty = Math.min(want, state.shares)
+  if (qty <= 0) return null
+  const gross = qty * price
+  const { fee, tax } = sellCost(cfg.market, gross, cfg.isEtf, cfg.fees)
   // 成本用平均法退掉，讓剩餘持股的成本基礎保持正確——批次額度是用它算的
   const avgCost = state.shares > 0 ? state.cost / state.shares : 0
   state.cash += gross - fee - tax
@@ -280,31 +369,45 @@ function fill(
 
   // 賣完之後把灰塵掃掉。留著會讓「已出清」永遠看起來像「還有部位」——
   // 止損天天觸發、在市天數灌水，而且完全不會報錯（見 fees.ts 的 isDust）。
-  if (isDust(market, state.shares)) {
+  if (isDust(cfg.market, state.shares)) {
     state.shares = 0
     state.cost = 0
   }
-  return { ...base, side: 'sell', qty, fee, tax, costBasis: avgCost }
+  return { ...base, side: 'sell', qty, price, fee, tax, costBasis: avgCost }
 }
 
-/** 用今日收盤估明日開盤的成交量。相抵之後只剩淨額那一邊。 */
+/**
+ * 明天要送的單。**跟 `fill` 用同一條相抵規則**：同價才併成一筆，
+ * 限價不同就是兩張單，畫面上也要分開列——不然讀者會以為只要下一張。
+ *
+ * 限價單用限價估，市價單用今日收盤估。
+ */
 function estimateFill(
-  o: Order, refPrice: number, state: Readonly<AccountState>, cfg: SimConfig,
-): PendingEstimate | null {
-  if (!(refPrice > 0)) return null
-  const buyQty = o.buyCash && o.buyCash > 0
-    ? affordableQty(cfg.market, Math.min(o.buyCash, state.cash), refPrice, cfg.fees)
+  o: Order, closePrice: number, state: Readonly<AccountState>, cfg: SimConfig,
+): PendingEstimate[] {
+  const { market, fees } = cfg
+  const buyRef = o.buyLimit ?? closePrice
+  const sellRef = o.sellLimit ?? closePrice
+  if (!(buyRef > 0) || !(sellRef > 0)) return []
+
+  const buyQty = (o.buyCash ?? 0) > 0
+    ? affordableQty(market, Math.min(o.buyCash!, state.cash), buyRef, fees)
     : 0
-  const sellQty = o.sellFraction && o.sellFraction > 0
-    ? Math.min(roundQty(cfg.market, state.shares * o.sellFraction), state.shares)
+  const sellQty = (o.sellFraction ?? 0) > 0
+    ? Math.min(roundQty(market, state.shares * o.sellFraction!), state.shares)
     : 0
-  const net = buyQty - sellQty
-  if (net === 0) return null
-  const qty = Math.abs(net)
-  return {
-    side: net > 0 ? 'buy' : 'sell',
-    refPrice,
-    qty,
-    amount: qty * refPrice,
+
+  const leg = (side: 'buy' | 'sell', qty: number): PendingEstimate[] => {
+    if (qty <= 0) return []
+    const limit = (side === 'buy' ? o.buyLimit : o.sellLimit) ?? null
+    const refPrice = limit ?? closePrice
+    return [{ side, refPrice, limit, qty, amount: qty * refPrice }]
   }
+
+  // 兩腿的掛單價相同（通常是都沒掛限價）＝ 明天會相抵，只送淨額那一張
+  if (buyQty > 0 && sellQty > 0 && buyRef === sellRef) {
+    const net = buyQty - sellQty
+    return net === 0 ? [] : leg(net > 0 ? 'buy' : 'sell', Math.abs(net))
+  }
+  return [...leg('sell', sellQty), ...leg('buy', buyQty)]
 }

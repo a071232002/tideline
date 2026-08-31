@@ -26,6 +26,7 @@
     "deploy:sql": "tsx scripts/deploy-sql.ts",
     "experiment": "tsx scripts/experiment.ts",
     "experiment:core": "tsx scripts/experiment-core.ts",
+    "experiment:limit": "tsx scripts/experiment-limit.ts",
     "sim:restart": "tsx scripts/sim-restart.ts",
     "trades": "tsx scripts/trade-log.ts"
   },

@@ -60,7 +60,7 @@ describe('成交理由：要有數字，而且對得上當天的分析', () => {
       bar('2026-08-17', 100, 100, 102, 100),
       bar('2026-08-18', 100, 100, 100, 100),
       bar('2026-08-19', 100, 100, 125, 100),
-      bar('2026-08-20', 100, 100, 100, 100),
+      bar('2026-08-20', 100, 100, 121, 100),  // 隔天要回到掛單價 120 才成交
     ]
     const r = run(bars, {
       '2026-08-17': day(),
@@ -124,50 +124,63 @@ describe('不動作也要有理由——三週不動看起來像壞掉', () => {
   })
 })
 
-describe('明日動作要能直接照做：股數與參考價', () => {
+describe('明日動作要能直接照做：股數與掛單價', () => {
   /**
-   * 「明日開盤買進一批」沒有股數也沒有價位，等於還是不能照做。
+   * 「明日買進一批」沒有股數也沒有價位，等於還是不能照做。
    *
-   * 明天的開盤價當然不知道——所以用**今日收盤**當參考價估算股數，
-   * 並且標明它是估算。給一個假裝精確的數字比給估算更糟，
-   * 但完全不給數字等於這一行沒有用。
+   * 加碼與減碼是**限價單**，價位就是加碼區上緣／賣出區下緣——那不是估的，
+   * 是明天真的要在券商輸入的數字，所以參考價用它。市價單（底倉、止損）
+   * 沒有價位可以輸入，只能用**今日收盤**估，並且標明是估算：
+   * 給一個假裝精確的數字比給估算更糟，但完全不給數字等於這一行沒有用。
    */
   const bars = [
     bar('2026-08-17', 100, 100, 102, 100),
     bar('2026-08-18', 100, 103, 104, 100),
   ]
 
-  it('買進：用今日收盤估股數與金額', () => {
+  it('加碼：掛在加碼區上緣，股數照那個價位算', () => {
     const r = run(bars, { '2026-08-18': day({ k: 26, d: 25, kPrev: 18, dPrev: 26 }) })
-    const est = r.pending!.estimate!
+    expect(r.pending!.estimates).toHaveLength(1)
+    const est = r.pending!.estimates[0]!
     expect(est.side).toBe('buy')
-    expect(est.refPrice).toBe(103)          // 今日收盤
-    // 一批 = 50,000/3 ≈ 16,667；扣手續費後買得起 161 股
-    expect(est.qty).toBe(161)
-    expect(est.amount).toBeCloseTo(161 * 103, 6)
+    expect(est.limit).toBe(101)             // 加碼區上緣，不是今日收盤 103
+    expect(est.refPrice).toBe(101)
+    // 一批 = 50,000/3 ≈ 16,667；扣手續費後在 101 買得起 164 股
+    expect(est.qty).toBe(164)
+    expect(est.amount).toBeCloseTo(164 * 101, 6)
   })
 
-  it('賣出：用目前持股與比例估股數', () => {
+  it('底倉是市價單：沒有掛單價，用今日收盤估', () => {
+    const r = simulate(bars, ruleDecider({ '2026-08-18': day() }, cfg.initialCash,
+      { ...DEFAULT_RULES, coreFraction: 2 / 3 }), cfg)
+    const est = r.pending!.estimates[0]!
+    expect(est.limit).toBeNull()
+    expect(est.refPrice).toBe(103)          // 今日收盤
+  })
+
+  it('減碼：掛在賣出區下緣，股數用目前持股與比例算', () => {
     const seq = [
       bar('2026-08-17', 100, 100, 102, 100),
       bar('2026-08-18', 100, 100, 100, 100),
       bar('2026-08-19', 100, 100, 125, 100),
     ]
     const r = run(seq, { '2026-08-17': day(), '2026-08-19': day({ pctB: 0.8 }) })
-    const est = r.pending!.estimate!
+    expect(r.pending!.estimates).toHaveLength(1)
+    const est = r.pending!.estimates[0]!
     expect(est.side).toBe('sell')
+    expect(est.limit).toBe(120)             // 賣出區下緣
     expect(est.qty).toBe(Math.floor(r.state.shares * DEFAULT_RULES.trimFraction))
   })
 
   it('不動作時沒有估算，不要生一個數字出來', () => {
     const r = run(bars, { '2026-08-18': day({ k: 57, d: 75, kPrev: 60, dPrev: 74 }) })
-    expect(r.pending!.estimate).toBeNull()
+    expect(r.pending!.estimates).toEqual([])
   })
 
-  it('現金不夠買一股時估算為 null，而不是 0 股', () => {
+  it('現金不夠買一股時不列出來，而不是 0 股', () => {
     const poor = { ...cfg, initialCash: 50 }
     const r = simulate(bars, ruleDecider(
       { '2026-08-18': day({ k: 26, d: 25, kPrev: 18, dPrev: 26 }) }, 50, DEFAULT_RULES), poor)
-    expect(r.pending!.estimate).toBeNull()
+    expect(r.pending!.estimates).toEqual([])
   })
 })

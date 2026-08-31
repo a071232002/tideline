@@ -30,6 +30,19 @@ import type { RuleParams } from './params'
  *
  * 訊號在 K 進入高檔（`armResetK`）或止損時解除：那時這一段已經走完了。
  *
+ * ## 價位觸發的單要掛限價
+ *
+ * 加碼與減碼讀的都是**盤中價位**——「今日最低進了加碼區」、「今日最高碰到
+ * 賣出區」。但成交排在次日，如果用開盤市價成交，觸發它的那個價位就從來沒有
+ * 真的成交過：碰到加碼區之後彈回去就買在區間上方，碰到賣出區之後回落就賣在
+ * 區間下方，**兩邊都往不利的方向偏，而且不會有任何錯誤訊息。**
+ *
+ * 所以這兩筆帶著 `buyLimit` / `sellLimit`，明天掛在區間邊緣，沒回到就不成交。
+ * 限價是今天就決定的（`levels` 裡本來就有），沒有偷看未來。
+ *
+ * **止損與底倉刻意不掛**，理由寫在各自的位置上：止損是要離場不是要好價錢，
+ * 底倉是配置決定不是價格決定。
+ *
  * ## 這個函式是有狀態的
  *
  * armed 與冷卻期都要跨天記憶，所以回傳的 decider 帶著閉包狀態。
@@ -102,6 +115,18 @@ export function ruleDecider(
     const reasons: string[] = []
     let sellFraction: number | undefined
     let buyCash: number | undefined
+    /**
+     * 掛單價。**加碼與減碼都是價位觸發的，所以要用限價成交。**
+     *
+     * 觸發條件讀的是盤中價位（「今日最低進了加碼區」），成交卻在次日開盤，
+     * 於是觸發它的那個價位從來沒有真的成交過——碰到加碼區之後彈回去就買貴，
+     * 碰到賣出區之後回落就賣便宜，兩邊都往不利的方向偏。限價是今天就決定的
+     * （加碼區上緣、賣出區下緣都寫在當天的 `levels` 裡），所以沒有偷看未來。
+     *
+     * 止損與底倉刻意不掛：見下方各自的註解。
+     */
+    let buyLimit: number | undefined
+    let sellLimit: number | undefined
 
     // 0. 先更新訊號狀態。回低檔與金叉是兩個先後事件，不必同一天。
     const goldenCross = day.kPrev !== null && day.dPrev !== null
@@ -112,6 +137,11 @@ export function ruleDecider(
     if (day.k > p.armResetK) { armed = false; dipped = false }
 
     // 1. 止損：收盤跌破。跌破了就不是減碼的事，兩者互斥、止損優先
+    //
+    // **這一筆不掛限價。** 止損的意思是這一段結構破壞了、要離場，不是
+    // 「賣得到某個價才走」。掛限價等於跌得越兇越賣不掉，那正好是最需要
+    // 賣掉的時候——跌破的隔天常常跳空低開，市價單吃到的就是那個跳空，
+    // 這是止損真實的成本，不該用一個永遠成交不了的掛單把它藏起來。
     const stop = day.levels.stop?.price
     if (p.useStop !== false && stop !== undefined && state.shares > 0 && bar.c < stop) {
       cooldownUntilIndex = ctx.index + p.cooldownDays
@@ -119,7 +149,8 @@ export function ruleDecider(
       dipped = false
       return {
         sellFraction: 1, triggers: ['stop'], decidedBy: 'rule',
-        reason: `收盤 ${n2(bar.c)} 跌破止跌 ${n2(stop)}，這一段反彈結構破壞，全部出清`,
+        reason: `收盤 ${n2(bar.c)} 跌破止跌 ${n2(stop)}，這一段反彈結構破壞，`
+          + '次日開盤全部出清（不掛限價，跳空也走）',
       }
     }
 
@@ -127,9 +158,11 @@ export function ruleDecider(
     const sellLo = day.levels.sell?.lo
     if (sellLo !== undefined && state.shares > 0 && bar.h >= sellLo) {
       sellFraction = p.trimFraction
+      if (p.useLimit !== false) sellLimit = sellLo
       triggers.push('sell_zone')
       reasons.push(`盤中最高 ${n2(bar.h)} 觸及賣出區 ${n2(sellLo)}，`
-        + `減碼 ${Math.round(p.trimFraction * 100)}%`)
+        + `減碼 ${Math.round(p.trimFraction * 100)}%`
+        + (sellLimit === undefined ? '' : `，次日掛限價 ${n2(sellLimit)}`))
     }
 
     const cooling = ctx.index <= cooldownUntilIndex
@@ -153,6 +186,8 @@ export function ruleDecider(
 
     // 3. 加碼：訊號要先架起來，價格與 %b 要到位，批次要有額度，且不在冷卻中
     if (wantCore) {
+      // **底倉不掛限價。** 這是配置決定不是價格決定——「這筆錢規劃給這一檔」
+      // 這句話沒有附帶價位，掛了限價就變成「便宜才配置」，那是另一條規則。
       buyCash = coreCash
       triggers.push('core')
       reasons.push(`建立底倉 ${Math.round((p.coreFraction ?? 0) * 100)}%`
@@ -166,10 +201,12 @@ export function ruleDecider(
       && state.cash > 0
     ) {
       buyCash = batchSize
+      if (p.useLimit !== false) buyLimit = day.levels.add.hi
       triggers.push('add')
       reasons.push(`回到加碼區 ${n2(day.levels.add.lo)}～${n2(day.levels.add.hi)}`
         + `（今日最低 ${n2(bar.l)}），%b ${day.pctB.toFixed(2)}、`
-        + `K ${n1(day.k)} 低檔金叉後的分批進場`)
+        + `K ${n1(day.k)} 低檔金叉後的分批進場`
+        + (buyLimit === undefined ? '' : `，次日掛限價 ${n2(buyLimit)}`))
     }
 
     // **不動作也要回一張單。** 沒有理由的沉默會被讀成故障——
@@ -184,6 +221,8 @@ export function ruleDecider(
     const order: Order = { triggers, decidedBy: 'rule', reason: reasons.join('；') }
     if (buyCash !== undefined) order.buyCash = buyCash
     if (sellFraction !== undefined) order.sellFraction = sellFraction
+    if (buyLimit !== undefined) order.buyLimit = buyLimit
+    if (sellLimit !== undefined) order.sellLimit = sellLimit
     return order
   }
 }

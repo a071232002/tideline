@@ -444,11 +444,11 @@ function describePending(triggers: string[]): string {
 }
 
 /**
- * 「明天開盤將執行」。最後一天的訊號還沒成交——那不是缺陷，
+ * 「明天要送的單」。最後一天的訊號還沒成交——那不是缺陷，
  * 那是整張帳戶卡最重要的一行：一句可以在真實世界照做的指令（§13.1 一）。
  *
- * 只記方向與觸發原因，不記股數：股數要用明天的開盤價才算得出來，
- * 今天先寫一個數字進去就是在編造一個不存在的成交。
+ * 限價單記得下掛單價，因為那是明天真的要在券商輸入的數字；
+ * 市價單只記方向與觸發原因，股數要用明天的開盤價才算得出來。
  */
 function pendingJson(r: SimResult): Record<string, unknown> | null {
   if (!r.pending) return null
@@ -461,9 +461,11 @@ function pendingJson(r: SimResult): Record<string, unknown> | null {
     signalD: r.pending.signalD,
     buy, sell,
     sellFraction: o.sellFraction ?? null,
+    buyLimit: o.buyLimit ?? null,
+    sellLimit: o.sellLimit ?? null,
     triggers: o.triggers,
     reason: o.reason ?? null,
-    estimate: r.pending.estimate,
+    estimates: r.pending.estimates,
   }
 }
 

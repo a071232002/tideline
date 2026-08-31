@@ -426,8 +426,20 @@ export interface SimTrack {
   pending: {
     signalD: string; buy: boolean; sell: boolean
     triggers: string[]; reason: string | null
-    /** 用今日收盤估的明日成交量。不動作時是 null */
-    estimate: { side: 'buy' | 'sell'; refPrice: number; qty: number; amount: number } | null
+    /** 掛單價。null＝市價單，開盤有什麼吃什麼 */
+    buyLimit?: number | null
+    sellLimit?: number | null
+    /**
+     * 明天要送的單。不動作時是空的。
+     *
+     * 是陣列因為**限價不同的買單與賣單不相抵**，那天要掛兩張。
+     * 舊資料只有單數的 `estimate`，讀的時候會是 undefined——
+     * 帳戶每次重建都會重寫這個欄位，所以不必轉檔。
+     */
+    estimates?: {
+      side: 'buy' | 'sell'; refPrice: number
+      limit: number | null; qty: number; amount: number
+    }[]
   } | null
   /**
    * AI 這條軌道的判斷紀錄。**只有 ai 軌道有。**

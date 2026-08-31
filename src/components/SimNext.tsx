@@ -39,9 +39,27 @@ import { Icon } from './Icon'
 
 function verb(p: NonNullable<SimTrack['pending']>): string {
   if (p.triggers.includes('stop')) return '全部賣掉'
-  if (p.buy && p.sell) return '買賣相抵，只送淨額'
+  // 兩張限價不同的單各自成交，不會相抵——講「相抵」會讓人只掛一張
+  if (p.buy && p.sell) {
+    return (p.estimates?.length ?? 0) > 1 ? '買、賣各掛一張' : '買賣相抵，只送淨額'
+  }
   if (p.sell) return '賣掉一半'
   return '買進'
+}
+
+/**
+ * 這張單怎麼送。**限價與市價要分得出來**——同一句「明天買進」，一個是
+ * 「掛 96.80，沒回到就不買」，另一個是「開盤多少買多少」，那是兩件事。
+ *
+ * 市價單的數量只能用今日收盤估，所以要標明是估的；限價單的價位不是估的，
+ * 是明天真的要輸入的數字，估的只有股數（成交價已經鎖住了，數量還受現金影響）。
+ */
+type Leg = NonNullable<NonNullable<SimTrack['pending']>['estimates']>[number]
+
+function howText(e: Leg): string {
+  return e.limit === null
+    ? `以今日收盤 ${e.refPrice.toFixed(2)} 估`
+    : `掛限價 ${e.limit.toFixed(2)}，沒碰到就不成交`
 }
 
 const qtyText = (q: number, market: 'TW' | 'US') =>
@@ -64,7 +82,7 @@ export function SimNext({ track, ai, market, latestBar }: {
   if (track.totalDays === 0) return null
   const p = track.pending
   const act = p && (p.buy || p.sell)
-  const est = p?.estimate ?? null
+  const legs = p?.estimates ?? []
 
   // AI 判斷過就要露臉，即使它一次都沒進場——那正是它的判斷
   const said = ai?.ai?.today
@@ -121,20 +139,22 @@ export function SimNext({ track, ai, market, latestBar }: {
         <span className="simnextact">
           {act ? verb(p) : agree ? '也是不動作' : '什麼都不用做'}
         </span>
-        {act && <span className="simfill">下一個開盤成交</span>}
+        {act && <span className="simfill">下一個交易日</span>}
       </>)}
 
       {/* 沒有股數與價位，這一行還是不能照做——讀完仍然不知道要在券商輸入什麼。
-          明天的開盤價當然不知道，所以用今日收盤估，並且明講是估的。 */}
-      {est && (
-        <span className="simnextqty tnum" data-testid="sim-pending-qty">
-          {qtyText(est.qty, market)}
+          限價單就把限價寫出來（那是要輸入的數字，不是估的）；
+          市價單只能用今日收盤估，並且明講是估的。 */}
+      {legs.map((e) => (
+        <span key={e.side} className="simnextqty tnum" data-testid="sim-pending-qty">
+          {legs.length > 1 && <b className="simnextleg">{e.side === 'buy' ? '買' : '賣'}</b>}
+          {qtyText(e.qty, market)}
           <span className="simnextref">
-            　約 {Math.round(est.amount).toLocaleString('en-US')}
-            （以今日收盤 {est.refPrice.toFixed(2)} 估）
+            　約 {Math.round(e.amount).toLocaleString('en-US')}
+            （{howText(e)}）
           </span>
         </span>
-      )}
+      ))}
 
       {/* 「為什麼不做」跟「要做什麼」一樣需要被說出口。
           沒有這句，連續幾週不動看起來就像資料壞掉。 */}
