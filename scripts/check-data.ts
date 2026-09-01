@@ -18,6 +18,8 @@
  * 修好之前留下的。這支腳本看的是資料本身。
  */
 import { createAdminClient } from '../src/lib/supabase/admin'
+import { judgmentStranded } from '../src/lib/sim/restart'
+import { taipeiToday } from '../src/lib/freshness'
 import { exitCleanly } from '../src/lib/exit'
 
 const db = createAdminClient()
@@ -75,20 +77,29 @@ if (stub.length > 0) {
     + `那會汙染回顧`)
 }
 
-// 6. 決策不能記在帳戶起算日之前
+// 6. AI **最新**的判斷要落在帳戶窗口內
 //
-//    那種紀錄永遠不會被模擬到（重建只從起算日開始），但它會被算進
-//    「AI 判斷了幾天」，也會被畫面當成最新判斷顯示出來。
+//    抓的是「畫面顯示 AI 說要加碼、帳戶卻什麼都沒做」：最新那筆判斷早於
+//    起算日就不會被重播，但它仍然是 ai.today，照樣顯示出來。
+//
+//    **不是數「有幾筆早於起算日」。** 那樣數會永遠亮著：sim_ai_log 永不
+//    刪除（§13.1），而 sim:restart 把起算日往後移，於是每一次合法的重新
+//    起算都留下一批窗口外的舊決策——那是設計，不是損壞。判斷邏輯與理由
+//    在 judgmentStranded。
 const { data: aiAccs } = await db.from('sim_accounts')
   .select('id, started_on, symbols(code)').eq('track', 'ai')
 for (const a of aiAccs ?? []) {
   if (!a.started_on) continue
-  const { data: early } = await db.from('sim_ai_log')
-    .select('d').eq('account_id', a.id).lt('d', a.started_on as string)
-  if ((early ?? []).length > 0) {
+  const { data: newest } = await db.from('sim_ai_log')
+    .select('d').eq('account_id', a.id)
+    .order('d', { ascending: false }).limit(1).maybeSingle()
+  const startedOn = a.started_on as string
+  if (judgmentStranded({
+    startedOn, newestLogD: (newest?.d as string) ?? null, today: taipeiToday(),
+  })) {
     const code = (a.symbols as unknown as { code: string })?.code ?? a.id
-    note(`${code}：有 ${early!.length} 筆 AI 決策早於帳戶起算日（${a.started_on}）——`
-      + `那些決策永遠不會被模擬到，卻會被當成最新判斷顯示`)
+    note(`${code}：AI 最新的判斷是 ${newest!.d}，早於帳戶起算日 ${startedOn}——`
+      + `那筆判斷不會被模擬到，卻會被當成今天的判斷顯示`)
   }
 }
 

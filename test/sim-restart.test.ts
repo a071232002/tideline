@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { checkRestartDate } from '../src/lib/sim/restart'
+import { checkRestartDate, judgmentStranded } from '../src/lib/sim/restart'
 
 /**
  * 改了規則參數之後，舊的模擬歷史不能沿用——**但也不能把新規則倒填回去。**
@@ -39,5 +39,52 @@ describe('checkRestartDate', () => {
     const r = checkRestartDate('2027-08-31', today)
     expect(r.ok).toBe(false)
     expect(r.ok === false && r.why).toContain('太遠')
+  })
+})
+
+/**
+ * **重新起算會刻意把舊的判斷留在窗口外，那不是損壞。**
+ *
+ * `sim_ai_log` 依 §13.1 永不刪除，而 `sim:restart` 把起算日往後移——
+ * 兩件事加起來，每一次合法的重新起算都會留下一批「早於起算日」的決策。
+ * 那是設計本身（舊的那段歷史就讓它結束），不是要修的東西。
+ *
+ * check-data 原本數的是「有幾筆早於起算日」，所以**每次重新起算之後
+ * 都會永遠亮紅燈**。一個永遠亮著的警告等於沒有警告——它只會訓練人
+ * 忽略這支腳本，而它守的另外六條是真的損壞。
+ *
+ * 真正要抓的是另一件事：**AI 最新的那個判斷不會被模擬到。**
+ * 那才是「畫面顯示 AI 說要買、帳戶卻什麼都沒做」的情況。
+ */
+describe('judgmentStranded：最新的判斷有沒有落在窗口外', () => {
+  const today = '2026-09-10'
+
+  it('還沒判斷過 → 不是問題', () => {
+    expect(judgmentStranded({ startedOn: '2026-09-02', newestLogD: null, today }))
+      .toBe(false)
+  })
+
+  it('剛重新起算、起算日還沒到 → 不是問題，AI 還沒輪到它的日子', () => {
+    expect(judgmentStranded({
+      startedOn: '2026-09-12', newestLogD: '2026-09-10', today,
+    })).toBe(false)
+  })
+
+  it('起算日已經到了，最新判斷還停在它之前 → **這才是問題**', () => {
+    expect(judgmentStranded({
+      startedOn: '2026-09-02', newestLogD: '2026-08-31', today,
+    })).toBe(true)
+  })
+
+  it('最新判斷正好落在起算日 → 會被模擬到，沒問題', () => {
+    expect(judgmentStranded({
+      startedOn: '2026-09-02', newestLogD: '2026-09-02', today,
+    })).toBe(false)
+  })
+
+  it('舊判斷一大堆在起算日之前、但最新那筆在窗口內 → 那正是重新起算的樣子', () => {
+    expect(judgmentStranded({
+      startedOn: '2026-09-02', newestLogD: '2026-09-08', today,
+    })).toBe(false)
   })
 })
