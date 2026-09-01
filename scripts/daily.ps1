@@ -169,6 +169,39 @@ if (-not (Test-Supabase)) {
   Write-Log 'Supabase 已就緒'
 }
 
+# 2.5 這個工作被砍掉的時間，夠不夠這一輪跑完？
+#
+# **這件事發生過，而且連續三天沒有人發現。** 2026-08-30、08-31、09-01 的
+# 早上那輪都在等抓取的時候被工作排程器砍掉（267014 SCHED_S_TASK_TERMINATED）：
+# log 裡只有一行「開始 AI 決策」，沒有錯誤、沒有結束。原因是 ai-decide 最多
+# 等 45 分鐘（INGEST_WAIT_MS），而兩個工作的 ExecutionTimeLimit 是 PT30M。
+#
+# Invoke-Step 會把子行程的輸出收集起來、等它結束才寫進 log——所以行程被砍
+# 的時候，那些輸出**一起消失**。沉默看起來跟正常一模一樣。
+#
+# 這一段在開跑前就把話說出口。它不能阻止被砍，但至少下一次 log 裡會有一行
+# 寫著「這一輪很可能跑不完」，而不是一片空白。
+$needMin = 65   # INGEST_WAIT_MS 45 分 + 實際工作 20 分（見 src/lib/schedule.ts）
+try {
+  $mine = Get-ScheduledTask -ErrorAction Stop | Where-Object {
+    $_.Actions.Arguments -match 'daily\.ps1'
+  }
+  foreach ($t in $mine) {
+    $lim = $t.Settings.ExecutionTimeLimit
+    if ([string]::IsNullOrEmpty($lim) -or $lim -eq 'PT0S') { continue }
+    $mins = [System.Xml.XmlConvert]::ToTimeSpan($lim).TotalMinutes
+    if ($mins -lt $needMin) {
+      Write-Log ('X 排程「{0}」的執行時間上限只有 {1} 分鐘，這一輪最多需要 {2} 分鐘' -f $t.TaskName, [int]$mins, $needMin)
+      Write-Log '  等抓取的時候會被砍掉，而且 log 不會留下任何痕跡。修法（PowerShell）：'
+      Write-Log ('  $x = Get-ScheduledTask -TaskName ''{0}''' -f $t.TaskName)
+      Write-Log '  $x.Settings.ExecutionTimeLimit = ''PT90M'''
+      Write-Log ('  Set-ScheduledTask -TaskName ''{0}'' -Settings $x.Settings' -f $t.TaskName)
+    }
+  }
+} catch {
+  # 查不到就算了——手動跑這支腳本時本來就沒有排程器
+}
+
 # 3. 抓取。雲端模式跳過——那是 Vercel Cron 的工作。
 $code = 0
 if ($SkipIngest) {

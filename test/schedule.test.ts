@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  INGEST_TIMES, lastScheduledIngest, nextScheduledIngest, freshSince, ingestOverdue,
-  SCHEDULE_SLACK_MS, agoText,
+  INGEST_TIMES, lastScheduledIngest, nextScheduledIngest, freshSince, ingestOverdue, SCHEDULE_SLACK_MS, agoText, INGEST_WAIT_MS, TASK_LIMIT_MIN, TASK_WORK_BUDGET_MIN,
 } from '../src/lib/schedule'
 
 /**
@@ -147,5 +146,31 @@ describe('agoText', () => {
 
   it('**負數當作剛剛**——時鐘偏移不該印出「-1 分鐘前」', () => {
     expect(agoText(-5000)).toBe('剛剛')
+  })
+})
+
+/**
+ * **排程器的執行時間上限必須容得下這一輪。**
+ *
+ * 實測 2026-08-30～09-01 連續三天：早上那輪在等抓取的時候被工作排程器砍掉
+ * （267014 SCHED_S_TASK_TERMINATED），log 裡只留下一行「開始 AI 決策」，
+ * 沒有錯誤、沒有結束。原因是等待 45 分鐘 > 上限 30 分鐘——為了 Cron 遲到
+ * 留的餘裕，因為排程器先動手而完全用不到。
+ *
+ * 那三天早上的 Cron 分別落在 08:04、08:04、08:15，距離 07:35 開跑是
+ * 29～46 分鐘，**每天都踩過那條線**。
+ *
+ * 這一條盯著「等待 + 工作時間 ≤ 排程器上限」。把等待時間往上調而忘了改
+ * 排程器，這裡會紅——那正是上次沒有人發現的原因：**它不會報錯，只會安靜地
+ * 少做一輪判斷。**
+ */
+describe('排程器的執行時間上限', () => {
+  it('等抓取 + 實際工作要塞得進上限，否則會在等待中被砍掉', () => {
+    const needMin = INGEST_WAIT_MS / 60_000 + TASK_WORK_BUDGET_MIN
+    expect(needMin).toBeLessThanOrEqual(TASK_LIMIT_MIN)
+  })
+
+  it('上限也不能無限大——一輪真的卡住時要有人來收屍', () => {
+    expect(TASK_LIMIT_MIN).toBeLessThanOrEqual(180)
   })
 })

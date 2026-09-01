@@ -22,7 +22,7 @@ import { createAdminClient } from '../src/lib/supabase/admin'
 import { rebuildAll } from '../src/lib/sim/run'
 import { waitForIngestToFinish, waitForFreshIngest } from '../src/lib/jobs'
 import { taipeiToday } from '../src/lib/freshness'
-import { freshSince } from '../src/lib/schedule'
+import { freshSince, INGEST_WAIT_MS } from '../src/lib/schedule'
 import { buildPrompt, allowedNumbers, type AiFacts } from '../src/lib/ai/prompt'
 import { parseDecision } from '../src/lib/ai/decide'
 import { exitCleanly } from '../src/lib/exit'
@@ -115,6 +115,9 @@ async function main() {
      const since = freshSince(new Date())
     const fresh = await waitForFreshIngest({
       since,
+      // 從 schedule.ts 拿，不要用 jobs.ts 的預設值——那個數字跟 Windows
+      // 工作排程器的執行時間上限是一組的，被單元測試盯著（見該常數的註解）
+      timeoutMs: INGEST_WAIT_MS,
       fetchRows: async () => {
         const { data } = await db.from('job_runs')
           .select('started_at, finished_at')

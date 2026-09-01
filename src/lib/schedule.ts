@@ -40,6 +40,46 @@ export const SCHEDULE_SLACK_MS = 30 * 60_000
  */
 export const SCHEDULE_GRACE_MS = 60 * 60_000
 
+/**
+ * 本機那輪最多等抓取多久（`waitForFreshIngest`）。
+ *
+ * ## 這個數字被 Windows 工作排程器的「執行時間上限」蓋掉過，而且沒有任何痕跡
+ *
+ * 實測 2026-08-30、08-31、09-01 **連續三天**：早上那輪 07:35 開跑、寫了
+ * 「開始 AI 決策」之後就再也沒有下文，log 裡沒有錯誤、沒有結束，
+ * 工作排程器回報 267014（SCHED_S_TASK_TERMINATED）。
+ *
+ * 原因是算術：這裡等 45 分鐘，而兩個工作的 `ExecutionTimeLimit` 是
+ * **PT30M**。早上的 Vercel Cron 實際落在 08:04、08:04、08:15——距離 07:35
+ * 是 29～46 分鐘，**每天都踩過那條 30 分鐘的線**，所以行程在等待中被砍。
+ * 為了「Cron 遲到」留的那一倍餘裕，因為排程器先動手而完全用不到。
+ *
+ * 下午那輪活著只是因為它的 Cron 落在 14:42～14:57（遲到 7～23 分鐘）——
+ * 08-30 與 08-31 兩天結束於 15:03，**離被砍只剩約一分鐘**。
+ *
+ * ## 所以這個常數有一個外部條件
+ *
+ * **工作排程器的執行時間上限必須大於這個值加上實際工作時間**
+ * （重建 + 問模型 + 推薦，實測約 4～8 分鐘）。已改成 PT90M。
+ * 下面的單元測試盯著這個關係：把等待時間往上調而忘了改排程器，測試會紅。
+ *
+ * 改上限的指令（PowerShell，兩個工作都要）：
+ *
+ *     $t = Get-ScheduledTask -TaskName 'Tideline 每日抓取'
+ *     $t.Settings.ExecutionTimeLimit = 'PT90M'
+ *     Set-ScheduledTask -TaskName 'Tideline 每日抓取' -Settings $t.Settings
+ */
+export const INGEST_WAIT_MS = 45 * 60_000
+
+/**
+ * 工作排程器目前設定的執行時間上限（分鐘）。**改了排程器就要改這裡**，
+ * 這個值存在的唯一理由是讓上面那個關係被測試盯著，而不是靠人記得。
+ */
+export const TASK_LIMIT_MIN = 90
+
+/** 一輪實際要做的事大概多久：重建、問模型、推薦。實測 4～8 分鐘，抓寬一點 */
+export const TASK_WORK_BUDGET_MIN = 20
+
 /** 這個時間點的台北日期與當日經過的毫秒 */
 function taipeiParts(now: Date): { dayStartMs: number; msIntoDay: number } {
   const shifted = now.getTime() + TAIPEI_OFFSET_MS
